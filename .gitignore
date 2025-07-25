@@ -1,4 +1,4 @@
-.config.py
-Include/
-Lib/
-Scripts/
+bin/
+*.db
+*.log
+.env

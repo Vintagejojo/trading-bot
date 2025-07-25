@@ -1,0 +1,6 @@
+symbol: "SHIBUSDT"
+rsi_period: 14
+overbought_level: 70.0
+oversold_level: 30.0
+quantity: 150000.0
+trading_enabled: false
