@@ -61,3 +61,31 @@ func (r *RSI) HasEnoughData() bool {
 func (r *RSI) GetDataCount() int {
 	return len(r.closes)
 }
+
+/*
+RSI Calculator
+
+This package implements the Relative Strength Index (RSI) technical indicator calculation.
+RSI is a momentum oscillator that measures the speed and change of price movements.
+
+Key Features:
+- Maintains a rolling window of price data for efficient calculation
+- Calculates RSI using standard formula:
+  1. Average Gain / Average Loss over the period
+  2. RS = Average Gain / Average Loss
+  3. RSI = 100 - (100 / (1 + RS))
+- Provides helper methods to check data sufficiency
+
+Implementation Details:
+- Stores only necessary price history (period + buffer)
+- Returns (50.0, false) when insufficient data (neutral value)
+- Returns (100.0, true) when no losses occur (max RSI value)
+- Thread-unsafe - caller should manage synchronization
+
+Usage:
+1. Initialize with NewRSI(period)
+2. Add prices sequentially with AddPrice(price)
+3. Calculate RSI with Calculate() which returns (value, dataSufficient)
+
+The calculator requires at least (period + 1) data points for valid calculation.
+*/

@@ -221,3 +221,49 @@ func (b *Bot) processRSISignal(rsi, currentPrice float64) {
 		}
 	}
 }
+
+// This bot implements a simple RSI-based trading strategy for Binance cryptocurrency exchange.
+// It connects to Binance's WebSocket API to receive real-time price data and executes trades
+// based on RSI (Relative Strength Index) signals.
+
+// Main Components:
+// 1. Bot Structure:
+//    - Manages WebSocket connection to Binance
+//    - Trades based on RSI signals
+//    - Maintains position state (entry price, quantity, etc.)
+//    - Handles configuration (symbol, RSI period, thresholds)
+
+// 2. Key Functionality:
+//    - Connects to Binance WebSocket for 1-minute kline/candlestick data
+//    - Calculates RSI in real-time as new candles close
+//    - Generates BUY signals when RSI falls below oversold level
+//    - Generates SELL signals when RSI rises above overbought level
+//    - Supports both live trading and paper trading modes
+
+// 3. Trading Logic:
+//    - BUY when RSI <= Oversold level (no existing position)
+//    - SELL when RSI >= Overbought level (with existing position)
+//    - Position tracking with profit/loss calculation
+//    - Configurable RSI period (default 14) and threshold levels
+
+// 4. Technical Implementation:
+//    - Uses Gorilla WebSocket for persistent connection
+//    - Automatic reconnection on failure
+//    - Connection keep-alive with ping/pong
+//    - Proper timeout handling
+//    - Thread-safe position management
+
+// Configuration Options:
+//    - Symbol: Trading pair (e.g., "BTCUSDT")
+//    - RSIPeriod: Number of periods for RSI calculation
+//    - OverboughtLevel: RSI threshold for sell signals
+//    - OversoldLevel: RSI threshold for buy signals
+//    - Quantity: Base order size
+//    - TradingEnabled: Switch between live/paper trading
+
+// Usage:
+// 1. Create config with desired parameters
+// 2. Initialize bot with New(config)
+// 3. Start bot with Start(ctx)
+
+// Note: The bot currently logs trade actions rather than executing them when TradingEnabled is false.
