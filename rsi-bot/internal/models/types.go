@@ -9,6 +9,8 @@ type Config struct {
 	OversoldLevel   float64 `mapstructure:"oversold_level"`
 	Quantity        float64 `mapstructure:"quantity"`
 	TradingEnabled  bool    `mapstructure:"trading_enabled"`
+	APIKey          string
+	APISecret       string
 }
 
 type Position struct {

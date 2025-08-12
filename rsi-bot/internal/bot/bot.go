@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -14,7 +15,16 @@ import (
 	"rsi-bot/internal/models"
 
 	"github.com/gorilla/websocket"
+	"github.com/joho/godotenv"
 )
+
+// Helper function for safe string slicing
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
 
 type Bot struct {
 	config        *models.Config
@@ -24,6 +34,20 @@ type Bot struct {
 }
 
 func New(config *models.Config) *Bot {
+	// Load environment variables from .env file
+	if err := godotenv.Load(); err != nil {
+		log.Println("No .env file found, using system environment variables")
+	}
+
+	// Load API credentials from environment
+	config.APIKey = os.Getenv("BINANCE_API_KEY")
+	config.APISecret = os.Getenv("BINANCE_API_SECRET")
+
+	// Validate API credentials
+	if config.APIKey == "" || config.APISecret == "" {
+		log.Fatal("BINANCE_API_KEY and BINANCE_API_SECRET must be set in .env file or environment variables")
+	}
+
 	return &Bot{
 		config:        config,
 		rsiCalculator: calculator.NewRSI(config.RSIPeriod),
@@ -37,8 +61,21 @@ func New(config *models.Config) *Bot {
 }
 
 func (b *Bot) Start(ctx context.Context) error {
-	wsURL := fmt.Sprintf("wss://stream.binance.com:9443/ws/%s@kline_1m",
-		strings.ToLower(b.config.Symbol))
+	// Safely log API key (first 8 chars only if long enough)
+	if len(b.config.APIKey) >= 16 {
+		log.Printf("🔑 API Key loaded: %s...%s",
+			b.config.APIKey[:8],
+			b.config.APIKey[len(b.config.APIKey)-8:])
+	} else {
+		log.Printf("🔑 API Key loaded: %s...", b.config.APIKey[:min(8, len(b.config.APIKey))])
+	}
+
+	// Try multiple WebSocket endpoints
+	wsURLs := []string{
+		fmt.Sprintf("wss://stream.binance.com:9443/ws/%s@kline_1m", strings.ToLower(b.config.Symbol)),
+		fmt.Sprintf("wss://stream.binance.com/ws/%s@kline_1m", strings.ToLower(b.config.Symbol)),
+		fmt.Sprintf("wss://data-stream.binance.vision/ws/%s@kline_1m", strings.ToLower(b.config.Symbol)),
+	}
 
 	for {
 		select {
@@ -46,8 +83,18 @@ func (b *Bot) Start(ctx context.Context) error {
 			return nil
 		default:
 			log.Println("Attempting to connect to Binance WebSocket...")
-			if err := b.connectAndRun(ctx, wsURL); err != nil {
-				log.Printf("Connection failed: %v", err)
+
+			var lastErr error
+			for _, wsURL := range wsURLs {
+				if err := b.connectAndRun(ctx, wsURL); err != nil {
+					log.Printf("Failed to connect to %s: %v", wsURL, err)
+					lastErr = err
+					continue
+				}
+			}
+
+			if lastErr != nil {
+				log.Printf("All connection attempts failed. Last error: %v", lastErr)
 				log.Println("Retrying in 5 seconds...")
 
 				select {
@@ -65,16 +112,22 @@ func (b *Bot) connectAndRun(ctx context.Context, wsURL string) error {
 	// Create dialer with timeout and proper headers
 	dialer := websocket.Dialer{
 		HandshakeTimeout: 45 * time.Second,
-		ReadBufferSize:   1024,
-		WriteBufferSize:  1024,
+		ReadBufferSize:   4096,
+		WriteBufferSize:  4096,
 	}
 
-	// Add proper headers
+	// Add proper headers for Binance
 	headers := http.Header{}
-	headers.Set("User-Agent", "RSI-Bot/1.0")
+	headers.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+	headers.Set("Origin", "https://www.binance.com")
 
-	conn, _, err := dialer.Dial(wsURL, headers)
+	log.Printf("🔗 Connecting to: %s", wsURL)
+	conn, resp, err := dialer.Dial(wsURL, headers)
 	if err != nil {
+		if resp != nil {
+			log.Printf("❌ HTTP Response Status: %s", resp.Status)
+			log.Printf("❌ Response Headers: %v", resp.Header)
+		}
 		return fmt.Errorf("websocket dial failed: %w", err)
 	}
 	defer conn.Close()
@@ -182,7 +235,8 @@ func (b *Bot) processRSISignal(rsi, currentPrice float64) {
 
 		if b.config.TradingEnabled {
 			log.Println("   🚨 WOULD EXECUTE SELL ORDER")
-			// TODO: Add actual Binance API call here
+			// TODO: Add actual Binance API call here using b.config.APIKey and b.config.APISecret
+			b.executeSellOrder(currentPrice)
 
 			// Update position
 			b.position.InPosition = false
@@ -200,7 +254,8 @@ func (b *Bot) processRSISignal(rsi, currentPrice float64) {
 
 		if b.config.TradingEnabled {
 			log.Println("   🚨 WOULD EXECUTE BUY ORDER")
-			// TODO: Add actual Binance API call here
+			// TODO: Add actual Binance API call here using b.config.APIKey and b.config.APISecret
+			b.executeBuyOrder(currentPrice)
 
 			// Update position
 			b.position.InPosition = true
@@ -220,6 +275,29 @@ func (b *Bot) processRSISignal(rsi, currentPrice float64) {
 			log.Printf("⌛ WAITING: RSI %.2f (no position)", rsi)
 		}
 	}
+}
+
+// TODO: Implement actual Binance API calls
+func (b *Bot) executeBuyOrder(price float64) error {
+	// This is where you'll use b.config.APIKey and b.config.APISecret
+	// to make actual API calls to Binance
+	keyPreview := b.config.APIKey
+	if len(keyPreview) > 8 {
+		keyPreview = keyPreview[:8] + "..."
+	}
+	log.Printf("🔑 Using API Key: %s", keyPreview)
+	return nil
+}
+
+func (b *Bot) executeSellOrder(price float64) error {
+	// This is where you'll use b.config.APIKey and b.config.APISecret
+	// to make actual API calls to Binance
+	keyPreview := b.config.APIKey
+	if len(keyPreview) > 8 {
+		keyPreview = keyPreview[:8] + "..."
+	}
+	log.Printf("🔑 Using API Key: %s", keyPreview)
+	return nil
 }
 
 // This bot implements a simple RSI-based trading strategy for Binance cryptocurrency exchange.
