@@ -7,12 +7,13 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"rsi-bot/internal/calculator"
+	"rsi-bot/internal/models"
 	"strconv"
 	"strings"
 	"time"
 
-	"rsi-bot/internal/calculator"
-	"rsi-bot/internal/models"
+	"github.com/adshao/go-binance/v2"
 
 	"github.com/gorilla/websocket"
 	"github.com/joho/godotenv"
@@ -31,6 +32,7 @@ type Bot struct {
 	rsiCalculator *calculator.RSI
 	position      *models.Position
 	conn          *websocket.Conn
+	client        *binance.Client
 }
 
 func New(config *models.Config) *Bot {
@@ -47,6 +49,9 @@ func New(config *models.Config) *Bot {
 	if config.APIKey == "" || config.APISecret == "" {
 		log.Fatal("BINANCE_API_KEY and BINANCE_API_SECRET must be set in .env file or environment variables")
 	}
+	//creating binance client below
+	client := binance.NewClient(config.APIKey, config.APISecret)
+	client.BaseURL = "https://testnet.binance.vision"
 
 	return &Bot{
 		config:        config,
@@ -57,6 +62,7 @@ func New(config *models.Config) *Bot {
 			EntryPrice: 0,
 			LastUpdate: time.Now(),
 		},
+		client: client,
 	}
 }
 
@@ -277,26 +283,40 @@ func (b *Bot) processRSISignal(rsi, currentPrice float64) {
 	}
 }
 
-// TODO: Implement actual Binance API calls
+// TODO: buy and sell orders below need to be tested rigoursly
 func (b *Bot) executeBuyOrder(price float64) error {
-	// This is where you'll use b.config.APIKey and b.config.APISecret
-	// to make actual API calls to Binance
-	keyPreview := b.config.APIKey
-	if len(keyPreview) > 8 {
-		keyPreview = keyPreview[:8] + "..."
+	log.Printf("🚀 Executing BUY order: %.0f @ %.8f", b.config.Quantity, price)
+
+	order, err := b.client.NewCreateOrderService().
+		Symbol(b.config.Symbol).
+		Side(binance.SideTypeBuy).
+		Type(binance.OrderTypeMarket). // Market order
+		Quantity(fmt.Sprintf("%.8f", b.config.Quantity)).
+		Do(context.Background())
+
+	if err != nil {
+		return fmt.Errorf("buy order failed: %w", err)
 	}
-	log.Printf("🔑 Using API Key: %s", keyPreview)
+
+	log.Printf("✅ BUY order executed: %+v", order)
 	return nil
 }
 
 func (b *Bot) executeSellOrder(price float64) error {
-	// This is where you'll use b.config.APIKey and b.config.APISecret
-	// to make actual API calls to Binance
-	keyPreview := b.config.APIKey
-	if len(keyPreview) > 8 {
-		keyPreview = keyPreview[:8] + "..."
+	log.Printf("💥 Executing SELL order: %.0f @ %.8f", b.position.Quantity, price)
+
+	order, err := b.client.NewCreateOrderService().
+		Symbol(b.config.Symbol).
+		Side(binance.SideTypeSell).
+		Type(binance.OrderTypeMarket).
+		Quantity(fmt.Sprintf("%.8f", b.position.Quantity)).
+		Do(context.Background())
+
+	if err != nil {
+		return fmt.Errorf("sell order failed: %w", err)
 	}
-	log.Printf("🔑 Using API Key: %s", keyPreview)
+
+	log.Printf("✅ SELL order executed: %+v", order)
 	return nil
 }
 
