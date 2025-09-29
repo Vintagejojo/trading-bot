@@ -1,0 +1,13 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "trading-bot-ui",
+  "outputfilename": "trading-bot-ui",
+  "frontend:install": "npm install",
+  "frontend:build": "npm run build",
+  "frontend:dev:watcher": "npm run dev",
+  "frontend:dev:serverUrl": "auto",
+  "author": {
+    "name": "Jordan R",
+    "email": "54691398+Vintagejojo@users.noreply.github.com"
+  }
+}

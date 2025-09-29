@@ -33,6 +33,7 @@ type Bot struct {
 	position      *models.Position
 	conn          *websocket.Conn
 	client        *binance.Client
+	logs          []string
 }
 
 func New(config *models.Config) *Bot {
