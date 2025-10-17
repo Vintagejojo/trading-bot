@@ -1,0 +1,19 @@
+# Bollinger Bands Strategy Configuration
+# Uses Bollinger Bands to identify price extremes
+
+symbol: "SHIBUSDT"
+quantity: 150000.0
+trading_enabled: false  # ALWAYS test with false first (paper trading)
+
+# Bollinger Bands Strategy
+strategy:
+  type: "bbands"
+  indicator:
+    type: "bbands"
+    params:
+      period: 20      # Moving average period
+      std_dev: 2.0    # Standard deviation multiplier
+
+# Trading Logic:
+# - BUY when price touches/crosses below lower band
+# - SELL when price touches/crosses above upper band

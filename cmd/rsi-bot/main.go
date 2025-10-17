@@ -10,8 +10,8 @@ import (
 	"log"
 	"os"
 	"os/signal"
-	"rsi-bot/internal/bot"
-	"rsi-bot/internal/models"
+	"rsi-bot/pkg/bot"
+	"rsi-bot/pkg/models"
 	"syscall"
 	"time"
 

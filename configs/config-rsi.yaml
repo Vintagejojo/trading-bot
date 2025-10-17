@@ -1,0 +1,16 @@
+# RSI Strategy Configuration
+# Uses Relative Strength Index to identify overbought/oversold conditions
+
+symbol: "SHIBUSDT"
+quantity: 150000.0
+trading_enabled: false  # ALWAYS test with false first (paper trading)
+
+# RSI Strategy
+strategy:
+  type: "rsi"
+  overbought_level: 70.0  # Sell when RSI >= this value
+  oversold_level: 30.0    # Buy when RSI <= this value
+  indicator:
+    type: "rsi"
+    params:
+      period: 14  # Number of periods for RSI calculation

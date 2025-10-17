@@ -1,0 +1,20 @@
+# MACD Strategy Configuration
+# Uses Moving Average Convergence Divergence for trend following
+
+symbol: "SHIBUSDT"
+quantity: 150000.0
+trading_enabled: false  # ALWAYS test with false first (paper trading)
+
+# MACD Strategy
+strategy:
+  type: "macd"
+  indicator:
+    type: "macd"
+    params:
+      fast_period: 12    # Fast EMA period
+      slow_period: 26    # Slow EMA period
+      signal_period: 9   # Signal line EMA period
+
+# Trading Logic:
+# - BUY when MACD line crosses above signal line (bullish crossover)
+# - SELL when MACD line crosses below signal line (bearish crossover)
