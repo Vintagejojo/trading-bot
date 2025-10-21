@@ -70,6 +70,10 @@ export function RemovePIN() {
   return window['go']['main']['App']['RemovePIN']();
 }
 
+export function ResetSetup() {
+  return window['go']['main']['App']['ResetSetup']();
+}
+
 export function SaveAPIKeys(arg1, arg2) {
   return window['go']['main']['App']['SaveAPIKeys'](arg1, arg2);
 }

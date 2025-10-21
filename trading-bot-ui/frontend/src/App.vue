@@ -37,6 +37,7 @@
           <v-chip
             :color="botStatus.running ? 'success' : 'grey'"
             variant="flat"
+            class="mr-2"
           >
             <v-icon
               :icon="botStatus.running ? 'mdi-circle' : 'mdi-circle-outline'"
@@ -45,6 +46,21 @@
             ></v-icon>
             {{ botStatus.running ? 'Running' : 'Stopped' }}
           </v-chip>
+
+          <v-menu>
+            <template v-slot:activator="{ props }">
+              <v-btn icon="mdi-cog" v-bind="props"></v-btn>
+            </template>
+            <v-list>
+              <v-list-item @click="resetAPIKeys">
+                <template v-slot:prepend>
+                  <v-icon icon="mdi-refresh"></v-icon>
+                </template>
+                <v-list-item-title>Reset API Keys</v-list-item-title>
+                <v-list-item-subtitle>Clear credentials and restart setup</v-list-item-subtitle>
+              </v-list-item>
+            </v-list>
+          </v-menu>
         </template>
       </v-app-bar>
 
@@ -82,7 +98,7 @@
 
 <script>
 import { ref, onMounted, onUnmounted } from 'vue'
-import { GetBotStatus, StartBot, StopBot, GetTradeHistory, GetTradeSummary, IsLocked, HasPIN, IsSetupComplete } from '../wailsjs/go/main/App'
+import { GetBotStatus, StartBot, StopBot, GetTradeHistory, GetTradeSummary, IsLocked, HasPIN, IsSetupComplete, ResetSetup } from '../wailsjs/go/main/App'
 import { EventsOn } from '../wailsjs/runtime/runtime'
 import SetupWizard from './components/SetupWizard.vue'
 import PinLock from './components/PinLock.vue'
@@ -204,6 +220,21 @@ export default {
       refreshData()
     }
 
+    const resetAPIKeys = async () => {
+      if (!confirm('Are you sure you want to reset your API keys? This will clear your credentials and return you to the setup wizard.')) {
+        return
+      }
+
+      try {
+        await ResetSetup()
+        // Reload the page to restart from setup wizard
+        window.location.reload()
+      } catch (error) {
+        console.error('Failed to reset setup:', error)
+        alert('Failed to reset: ' + error)
+      }
+    }
+
     onMounted(async () => {
       await checkSetupStatus()
 
@@ -249,7 +280,8 @@ export default {
       startBot,
       stopBot,
       handleSetupComplete,
-      handleUnlock
+      handleUnlock,
+      resetAPIKeys
     }
   }
 }

@@ -62,7 +62,10 @@
 
             <template v-slot:append>
               <div class="text-right">
-                <div class="font-weight-bold">{{ parseFloat(balance.free).toFixed(4) }}</div>
+                <div class="font-weight-bold text-success" v-if="balance.usd_value">
+                  ${{ balance.usd_value.toFixed(2) }}
+                </div>
+                <div class="text-caption">{{ parseFloat(balance.free).toFixed(4) }}</div>
                 <div class="text-caption text-grey" v-if="balance.locked > 0">
                   Locked: {{ parseFloat(balance.locked).toFixed(4) }}
                 </div>
@@ -114,10 +117,16 @@ export default {
         .sort((a, b) => parseFloat(b.free) - parseFloat(a.free))
     })
 
-    // Calculate total in USDT (simplified - just USDT assets)
+    // Calculate total portfolio value in USD (sum all usd_value fields)
     const totalBalanceUSDT = computed(() => {
-      const usdtBalance = balances.value.find(b => b.asset === 'USDT')
-      return usdtBalance ? parseFloat(usdtBalance.free) : 0
+      let total = 0
+      balances.value.forEach(b => {
+        if (b.usd_value) {
+          total += b.usd_value
+        }
+      })
+      console.log(`Total portfolio value: $${total.toFixed(2)}`)
+      return total
     })
 
     onMounted(() => {

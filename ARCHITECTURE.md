@@ -520,6 +520,385 @@ CREATE TABLE trades (
 - `internal/tracker/trade.go`
 - `internal/tracker/metrics.go`
 
+### Phase 7: Safety & Resilience
+
+**Goal**: Implement critical safety mechanisms and resilience features to protect against catastrophic losses and ensure system stability
+
+**Tasks**:
+
+#### 🚨 Emergency Lockouts
+1. **Circuit Breaker Logic**
+   - Halt all trading if drawdown exceeds 10% in 1 hour
+   - Implement rolling window P&L monitoring
+   - Auto-disable trading until manual override or cooldown period expires
+   - Send emergency alerts via configured channels (email, SMS, webhook)
+
+2. **Max Daily Loss Threshold**
+   - Configure daily loss cap (e.g., -5% of portfolio)
+   - Disable trading immediately when threshold is breached
+   - Reset counter at market open or configurable time
+   - Log breach events with full context
+
+3. **Trade Frequency Guardrails**
+   - Lockout if trade count exceeds X trades in Y minutes
+   - Prevent rapid-fire trading loops from bugs or market anomalies
+   - Configurable sliding window (e.g., max 10 trades per 15 minutes)
+   - Implement exponential backoff on repeated lockouts
+
+4. **API Health Checks**
+   - Monitor API latency and response times
+   - Pause trading on latency spikes (>2s response time)
+   - Detect failed endpoints and rotate to backup if available
+   - Track API error rates and auto-pause on elevated errors (>5%)
+
+#### 💧 Liquidity Safeguards
+1. **Minimum Order Book Depth**
+   - Verify sufficient liquidity before placing orders
+   - Check bid/ask depth at multiple price levels (e.g., 1%, 2%, 5%)
+   - Skip trades if order book is too thin (risk of slippage)
+   - Configurable minimum depth thresholds per symbol
+
+2. **Spread Thresholds**
+   - Calculate bid-ask spread percentage
+   - Skip trading pairs with excessive spreads (e.g., >0.5%)
+   - Monitor spread widening as early warning signal
+   - Log spread violations for analysis
+
+3. **Volume Filters**
+   - Require minimum 24-hour volume before trading
+   - Check recent candle volume for sudden drops
+   - Configurable volume thresholds (e.g., $1M daily minimum)
+   - Detect volume anomalies that may indicate manipulation
+
+4. **Slippage Simulation**
+   - Simulate order execution against order book
+   - Calculate expected slippage for order size
+   - Abort trades if simulated slippage exceeds threshold (e.g., >1%)
+   - Use VWAP for better slippage estimation
+
+#### 🧠 Smart Recovery Logic
+1. **Graceful Degradation**
+   - Rotate to backup trading pairs if primary pair fails liquidity checks
+   - Switch to passive strategy (wider stops, lower frequency) during high volatility
+   - Reduce position sizes automatically during adverse conditions
+   - Maintain fallback strategy queue
+
+2. **Manual Override Dashboard**
+   - Web UI controls to pause/resume trading
+   - Require reason codes for manual interventions
+   - Override emergency lockouts with authentication
+   - Display system health status and active safety triggers
+
+3. **Logging & Alerting**
+   - Log all lockout events with:
+     - Timestamp
+     - Trigger condition (which safety rule fired)
+     - System state snapshot (positions, P&L, market conditions)
+     - Recovery actions taken
+   - Alert channels:
+     - Critical: Emergency lockouts, API failures
+     - Warning: Spread violations, volume drops
+     - Info: Trade frequency approaching limits
+   - Configurable alert destinations (email, Slack, Telegram, webhook)
+
+**New files**:
+- `internal/safety/circuit_breaker.go` - Drawdown and loss limit monitoring
+- `internal/safety/frequency_limiter.go` - Trade frequency guardrails
+- `internal/safety/api_health.go` - API monitoring and health checks
+- `internal/safety/liquidity_guard.go` - Order book depth and spread checks
+- `internal/safety/slippage_simulator.go` - Pre-trade slippage estimation
+- `internal/safety/recovery.go` - Graceful degradation and failover logic
+- `internal/safety/override.go` - Manual control and authentication
+- `internal/safety/alerts.go` - Multi-channel alerting system
+- `internal/safety/config.go` - Safety configuration and thresholds
+
+**Configuration Example**:
+```yaml
+safety:
+  circuit_breaker:
+    enabled: true
+    max_drawdown_1h: 10.0      # Halt if -10% in 1 hour
+    max_daily_loss: 5.0         # Halt if -5% in one day
+    cooldown_minutes: 60        # Wait 1 hour before auto-resume
+
+  trade_frequency:
+    enabled: true
+    max_trades_per_15min: 10
+    max_trades_per_hour: 30
+    lockout_minutes: 30
+
+  api_health:
+    enabled: true
+    max_latency_ms: 2000
+    max_error_rate: 0.05        # 5%
+    check_interval_seconds: 30
+
+  liquidity:
+    min_order_book_depth_usd: 50000
+    max_spread_percent: 0.5
+    min_24h_volume_usd: 1000000
+    min_candle_volume_usd: 10000
+
+  slippage:
+    enabled: true
+    max_slippage_percent: 1.0
+    use_vwap: true
+
+  recovery:
+    backup_symbols:
+      - "ETHUSDT"
+      - "BNBUSDT"
+    passive_strategy: "conservative_rsi"
+    position_size_multiplier: 0.5  # Reduce size by 50% during recovery
+
+  alerts:
+    email:
+      enabled: true
+      smtp_server: "smtp.gmail.com:587"
+      from: "bot@example.com"
+      to: ["trader@example.com"]
+    webhook:
+      enabled: true
+      url: "https://hooks.slack.com/services/YOUR/WEBHOOK/URL"
+    levels:
+      critical: ["circuit_breaker", "api_failure"]
+      warning: ["spread_violation", "volume_drop"]
+      info: ["frequency_warning"]
+```
+
+**Critical Safety Notes**:
+- All safety features should default to **ENABLED** in production
+- Safety checks run BEFORE any order execution
+- Failed safety checks must log detailed context
+- Manual overrides require authentication and are logged
+- Test safety features thoroughly in paper trading mode
+
+### Phase 8: Multi-Timeframe Analysis
+
+**Goal**: Implement multi-timeframe chart support for better signal reliability and reduced false positives through cross-timeframe confirmation
+
+**Tasks**:
+
+#### 📊 Multi-Timeframe Chart Integration
+1. **Timeframe Management**
+   - Support for multiple chart intervals: 1m, 5m, 15m, 1h, 4h, daily
+   - Concurrent WebSocket subscriptions for each active timeframe
+   - Efficient data storage and synchronization across timeframes
+   - Automatic candle aggregation (e.g., build 15m candles from 1m data)
+
+2. **Indicator Calculations Per Timeframe**
+   - Run RSI, MACD, Bollinger Bands on each configured timeframe
+   - Independent indicator state per timeframe
+   - Timestamped indicator values for alignment
+   - Example: `RSI_1m`, `RSI_5m`, `RSI_15m`, `RSI_1h` all calculated separately
+
+3. **Data Structures**
+   - Extend indicator interface to support timeframe parameter
+   - Store historical candles per timeframe
+   - Efficient lookback window management
+   - Memory-conscious data retention policies
+
+#### 🔄 Signal Layering & Confirmation
+1. **Cross-Timeframe Signal Logic**
+   - **Higher Timeframe Trend Filter**: Only trade in direction of higher timeframe trend
+     - Example: Only BUY signals if 1h MACD is bullish
+   - **Lower Timeframe Entry**: Use faster timeframes for precise entry
+     - Example: 15m RSI oversold + 1h trend confirmation = BUY
+   - **Multi-Layer Confirmation**: Require agreement across multiple timeframes
+     - Example: 5m RSI oversold + 15m RSI oversold + 1h trend up = Strong BUY
+
+2. **Timeframe Priority Levels**
+   - **Primary**: Main decision timeframe (e.g., 15m)
+   - **Confirmation**: Higher timeframe for trend validation (e.g., 1h)
+   - **Entry**: Lower timeframe for precise timing (e.g., 5m)
+   - Configurable weights per timeframe in signal scoring
+
+3. **Signal Strength Scoring**
+   - Signals gain strength when aligned across multiple timeframes
+   - Penalty for conflicting signals across timeframes
+   - Example scoring:
+     ```
+     15m RSI BUY (0.8) + 1h MACD BUY (0.9) + 5m RSI BUY (0.7) = 0.85 confidence
+     15m RSI BUY (0.8) + 1h MACD SELL (0.6) = 0.4 confidence (conflict penalty)
+     ```
+
+#### ⚙️ Configurable Timeframes
+1. **Per-Indicator Timeframe Settings**
+   - Allow users to specify which timeframes to use per indicator
+   - Example config:
+     ```yaml
+     indicators:
+       rsi:
+         timeframes: [5m, 15m, 1h]
+         period: 14
+       macd:
+         timeframes: [15m, 1h, 4h]
+         fast_period: 12
+     ```
+
+2. **Strategy-Level Timeframe Configuration**
+   - Define timeframe combinations per strategy
+   - Pre-configured templates (e.g., "Scalping", "Swing Trading", "Position Trading")
+   - Example:
+     ```yaml
+     strategies:
+       scalping:
+         primary_timeframe: 5m
+         confirmation_timeframe: 15m
+         entry_timeframe: 1m
+
+       swing_trading:
+         primary_timeframe: 1h
+         confirmation_timeframe: 4h
+         entry_timeframe: 15m
+     ```
+
+3. **Dashboard Controls**
+   - UI to enable/disable specific timeframes
+   - Visual display of active timeframes per indicator
+   - Real-time switching without bot restart
+   - Timeframe health indicators (data quality, sync status)
+
+#### 🧪 Backtesting Compatibility
+1. **Historical Multi-Timeframe Data**
+   - Load and align historical data across all timeframes
+   - Handle missing data and gaps
+   - Ensure proper chronological order across timeframes
+   - Validate data consistency (e.g., 5m candles aggregate to 15m)
+
+2. **Backtest Engine Updates**
+   - Simulate multi-timeframe signal generation
+   - Accurate timestamp alignment in backtests
+   - Performance metrics per timeframe combination
+   - A/B testing different timeframe configurations
+
+3. **Trade Log Enhancements**
+   - Record which timeframes contributed to each signal
+   - Store indicator values from all active timeframes
+   - Enable post-trade analysis by timeframe
+   - Example log entry:
+     ```json
+     {
+       "trade_id": "abc123",
+       "signal": "BUY",
+       "confidence": 0.85,
+       "timeframes": {
+         "5m": {"rsi": 28, "signal": "BUY", "confidence": 0.7},
+         "15m": {"rsi": 32, "signal": "BUY", "confidence": 0.8},
+         "1h": {"macd": 0.5, "signal": "BUY", "confidence": 0.9}
+       }
+     }
+     ```
+
+#### 🔮 Future Expansion & Scalability
+1. **Additional Timeframe Support**
+   - Structure code to easily add new intervals (2m, 30m, 6h, weekly)
+   - Generic timeframe parsing and validation
+   - Automatic candle aggregation for non-native intervals
+   - No hardcoded timeframe assumptions
+
+2. **Performance Optimization**
+   - Lazy loading of timeframe data (only load what's needed)
+   - Shared WebSocket connections where possible
+   - Candle caching and reuse across indicators
+   - Intelligent update triggering (only recalculate when new data arrives)
+
+3. **Advanced Features**
+   - Adaptive timeframe selection based on volatility
+   - Automatic timeframe optimization via machine learning
+   - Correlation analysis across timeframes
+   - Divergence detection between timeframes
+
+**New files**:
+- `internal/timeframe/manager.go` - Timeframe management and synchronization
+- `internal/timeframe/candle_store.go` - Multi-timeframe candle storage
+- `internal/timeframe/aggregator.go` - Candle aggregation (1m → 5m, 15m, etc.)
+- `internal/strategies/multi_timeframe_strategy.go` - Cross-timeframe strategy base
+- `internal/signals/timeframe_signal.go` - Extended signal with timeframe context
+- `pkg/websocket/multi_stream.go` - Multiple WebSocket stream management
+- `internal/backtest/timeframe_engine.go` - Multi-timeframe backtesting
+
+**Configuration Example**:
+```yaml
+timeframes:
+  enabled: [1m, 5m, 15m, 1h, 4h]
+  primary: 15m          # Main decision timeframe
+
+  data_retention:
+    1m: 1000            # Keep 1000 candles (~16 hours)
+    5m: 500             # Keep 500 candles (~42 hours)
+    15m: 300            # Keep 300 candles (~75 hours)
+    1h: 200             # Keep 200 candles (~8 days)
+    4h: 100             # Keep 100 candles (~16 days)
+
+  websocket:
+    aggregate_from: 1m   # Build all timeframes from 1m stream
+    native_streams: [1m, 5m, 15m]  # Or subscribe to native streams
+
+strategies:
+  rsi_multi_tf:
+    type: multi_timeframe
+    primary_timeframe: 15m
+
+    indicators:
+      rsi:
+        timeframes:
+          5m:
+            period: 14
+            weight: 0.2
+          15m:
+            period: 14
+            weight: 0.5
+          1h:
+            period: 14
+            weight: 0.3
+
+    rules:
+      # Only trade if 1h trend agrees
+      trend_filter:
+        timeframe: 1h
+        indicator: macd
+        required: true
+
+      # Primary entry on 15m
+      entry:
+        timeframe: 15m
+        indicator: rsi
+        oversold: 30
+        overbought: 70
+
+      # Additional confirmation from 5m
+      confirmation:
+        timeframe: 5m
+        indicator: rsi
+        oversold: 35
+        overbought: 65
+        required: false  # Optional boost
+
+    signal_logic: weighted  # Options: all_agree, weighted, majority
+
+backtesting:
+  multi_timeframe:
+    enabled: true
+    validate_alignment: true
+    log_all_timeframes: true
+```
+
+**Implementation Priorities**:
+1. **Phase 8.1**: Basic multi-timeframe data management (1m, 5m, 15m, 1h)
+2. **Phase 8.2**: Simple cross-timeframe confirmation (higher TF trend filter)
+3. **Phase 8.3**: Full signal layering with configurable weights
+4. **Phase 8.4**: Backtesting integration and performance analysis
+5. **Phase 8.5**: Dashboard UI for timeframe management
+6. **Phase 8.6**: Advanced features (adaptive selection, optimization)
+
+**Benefits**:
+- **Reduced False Signals**: Multi-timeframe confirmation filters out noise
+- **Better Entries**: Use lower timeframes for precise entry points
+- **Trend Alignment**: Ensure trades align with higher timeframe trends
+- **Flexibility**: Adapt to different trading styles (scalping, swing, position)
+- **Backtestable**: Validate timeframe combinations historically
+
 ## Configuration Examples
 
 ### Example 1: Independent RSI Strategy

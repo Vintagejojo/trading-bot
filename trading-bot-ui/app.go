@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -428,13 +429,35 @@ func (a *App) GetEnvFilePath() string {
 	return a.setup.GetEnvFilePath()
 }
 
+// ResetSetup clears all API credentials and returns to setup wizard
+func (a *App) ResetSetup() error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	// Stop bot if running
+	if a.botRunning {
+		if err := a.StopBot(); err != nil {
+			log.Printf("Warning: Failed to stop bot during reset: %v", err)
+		}
+	}
+
+	// Reset setup (deletes .env file)
+	if err := a.setup.ResetSetup(); err != nil {
+		return fmt.Errorf("failed to reset setup: %w", err)
+	}
+
+	log.Println("Setup has been reset - API credentials cleared")
+	return nil
+}
+
 // ============= Wallet Balance Methods =============
 
 // WalletBalance represents a single asset balance
 type WalletBalance struct {
-	Asset  string `json:"asset"`
-	Free   string `json:"free"`
-	Locked string `json:"locked"`
+	Asset     string  `json:"asset"`
+	Free      string  `json:"free"`
+	Locked    string  `json:"locked"`
+	USDValue  float64 `json:"usd_value"`  // USD value of this asset
 }
 
 // GetWalletBalance returns user's Binance wallet balances
@@ -456,10 +479,13 @@ func (a *App) GetWalletBalance() ([]WalletBalance, error) {
 	log.Printf("API Key length: %d, Secret length: %d", len(apiKey), len(apiSecret))
 	log.Printf("API Key first 8 chars: %s...", apiKey[:min(8, len(apiKey))])
 
-	// Create Binance US client for wallet balance
+	// Create Binance client for wallet balance
 	client := binance.NewClient(apiKey, apiSecret)
-	// Use Binance US API endpoint
-	client.BaseURL = "https://api.binance.us"
+
+	// Use configured API endpoint
+	apiEndpoint := a.setup.GetAPIEndpoint()
+	client.BaseURL = apiEndpoint
+	log.Printf("Using Binance API endpoint: %s", apiEndpoint)
 
 	// Enable debug mode to see the actual request
 	client.Debug = true
@@ -494,13 +520,55 @@ func (a *App) GetWalletBalance() ([]WalletBalance, error) {
 	}
 	log.Printf("SUCCESS: Got account info with %d balances", len(account.Balances))
 
-	// Convert to our format
+	// Get current prices for all trading pairs
+	prices, err := client.NewListPricesService().Do(context.Background())
+	if err != nil {
+		log.Printf("Warning: Failed to get prices: %v", err)
+		// Continue without prices - will show 0 USD values
+	}
+
+	// Build price map for quick lookup (symbol -> USD price)
+	priceMap := make(map[string]float64)
+	if prices != nil {
+		for _, price := range prices {
+			if priceFloat, err := strconv.ParseFloat(price.Price, 64); err == nil {
+				priceMap[price.Symbol] = priceFloat
+			}
+		}
+	}
+
+	// Convert to our format with USD values
 	balances := make([]WalletBalance, 0, len(account.Balances))
 	for _, balance := range account.Balances {
+		freeAmount, _ := strconv.ParseFloat(balance.Free, 64)
+		lockedAmount, _ := strconv.ParseFloat(balance.Locked, 64)
+		totalAmount := freeAmount + lockedAmount
+
+		usdValue := 0.0
+		asset := balance.Asset
+
+		// Calculate USD value based on asset type
+		if asset == "USD" || asset == "USDT" || asset == "BUSD" || asset == "USDC" || asset == "TUSD" {
+			// Stablecoins are 1:1 with USD
+			usdValue = totalAmount
+		} else if totalAmount > 0 {
+			// For other assets, look up price in USDT or USD pairs
+			symbol := asset + "USDT"
+			if price, ok := priceMap[symbol]; ok {
+				usdValue = totalAmount * price
+			} else {
+				symbol = asset + "USD"
+				if price, ok := priceMap[symbol]; ok {
+					usdValue = totalAmount * price
+				}
+			}
+		}
+
 		balances = append(balances, WalletBalance{
-			Asset:  balance.Asset,
-			Free:   balance.Free,
-			Locked: balance.Locked,
+			Asset:    balance.Asset,
+			Free:     balance.Free,
+			Locked:   balance.Locked,
+			USDValue: usdValue,
 		})
 	}
 

@@ -37,6 +37,8 @@ export function LockApp():Promise<void>;
 
 export function RemovePIN():Promise<void>;
 
+export function ResetSetup():Promise<void>;
+
 export function SaveAPIKeys(arg1:string,arg2:string):Promise<void>;
 
 export function SetPIN(arg1:string):Promise<void>;

@@ -228,6 +228,7 @@ export namespace main {
 	    asset: string;
 	    free: string;
 	    locked: string;
+	    usd_value: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new WalletBalance(source);
@@ -238,6 +239,7 @@ export namespace main {
 	        this.asset = source["asset"];
 	        this.free = source["free"];
 	        this.locked = source["locked"];
+	        this.usd_value = source["usd_value"];
 	    }
 	}
 

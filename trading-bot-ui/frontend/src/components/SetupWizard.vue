@@ -1,134 +1,234 @@
 <template>
-  <div class="fixed inset-0 bg-gray-900 flex items-center justify-center z-50">
-    <div class="bg-gray-800 rounded-lg p-8 border border-gray-700 max-w-2xl w-full">
-      <!-- Header -->
-      <div class="text-center mb-8">
-        <div class="text-6xl mb-4">🚀</div>
-        <h1 class="text-3xl font-bold text-blue-400 mb-2">Welcome to Trading Bot</h1>
-        <p class="text-gray-400">Let's set up your Binance API connection</p>
-      </div>
+  <v-dialog :model-value="true" persistent fullscreen>
+    <v-card color="surface">
+      <v-container class="fill-height">
+        <v-row align="center" justify="center">
+          <v-col cols="12" md="8" lg="6" xl="5">
+            <v-card elevation="8">
+              <!-- Header -->
+              <v-card-title class="text-center py-8">
+                <div class="d-flex flex-column align-center">
+                  <div class="text-h2 mb-4">🚀</div>
+                  <div class="text-h4 text-primary font-weight-bold mb-2">
+                    Welcome to Jojo's Nerd Casino
+                  </div>
+                  <div class="text-subtitle-1 text-medium-emphasis">
+                    Let's set up your Binance API connection
+                  </div>
+                </div>
+              </v-card-title>
 
-      <!-- Instructions Panel -->
-      <div v-if="showInstructions" class="mb-6 bg-gray-700 rounded-lg p-6">
-        <h3 class="text-lg font-semibold text-blue-400 mb-3">How to Get Your API Keys:</h3>
-        <ol class="space-y-2 text-sm text-gray-300">
-          <li class="flex items-start">
-            <span class="text-blue-400 mr-2">1.</span>
-            <span>Log in to <a href="https://www.binance.com" target="_blank" class="text-blue-400 underline">Binance.com</a></span>
-          </li>
-          <li class="flex items-start">
-            <span class="text-blue-400 mr-2">2.</span>
-            <span>Go to <strong>Profile → API Management</strong></span>
-          </li>
-          <li class="flex items-start">
-            <span class="text-blue-400 mr-2">3.</span>
-            <span>Click <strong>"Create API"</strong> and name it "Trading Bot"</span>
-          </li>
-          <li class="flex items-start">
-            <span class="text-blue-400 mr-2">4.</span>
-            <span>Complete 2FA verification</span>
-          </li>
-          <li class="flex items-start">
-            <span class="text-blue-400 mr-2">5.</span>
-            <span>Copy your <strong>API Key</strong> and <strong>Secret Key</strong></span>
-          </li>
-        </ol>
+              <v-divider></v-divider>
 
-        <div class="mt-4 p-4 bg-red-900 bg-opacity-30 border border-red-700 rounded">
-          <p class="text-red-400 text-sm font-semibold mb-2">⚠️ IMPORTANT Security Settings:</p>
-          <ul class="text-sm text-gray-300 space-y-1">
-            <li>✓ Enable "Enable Trading"</li>
-            <li>✗ <strong>DISABLE "Enable Withdrawals"</strong> (for security!)</li>
-            <li>✓ Consider restricting to your IP address</li>
-          </ul>
-        </div>
+              <!-- Instructions Panel -->
+              <v-card-text v-if="showInstructions" class="pa-6">
+                <v-card variant="tonal" color="primary" class="mb-4">
+                  <v-card-title class="text-h6">
+                    <v-icon icon="mdi-information" class="mr-2"></v-icon>
+                    How to Get Your API Keys
+                  </v-card-title>
+                  <v-card-text>
+                    <v-list density="comfortable" bg-color="transparent">
+                      <v-list-item>
+                        <template v-slot:prepend>
+                          <v-chip color="primary" size="small" class="font-weight-bold">1</v-chip>
+                        </template>
+                        <v-list-item-title>
+                          Log in to
+                          <a
+                            href="https://www.binance.com"
+                            target="_blank"
+                            class="text-primary text-decoration-underline"
+                          >
+                            Binance.com
+                          </a>
+                        </v-list-item-title>
+                      </v-list-item>
 
-        <div class="mt-4 p-4 bg-blue-900 bg-opacity-30 border border-blue-700 rounded">
-          <p class="text-blue-400 text-sm font-semibold mb-1">💡 For Testing:</p>
-          <p class="text-sm text-gray-300">
-            Use <a href="https://testnet.binance.vision" target="_blank" class="text-blue-400 underline">Binance Testnet</a>
-            to test with fake money before using real funds.
-          </p>
-        </div>
+                      <v-list-item>
+                        <template v-slot:prepend>
+                          <v-chip color="primary" size="small" class="font-weight-bold">2</v-chip>
+                        </template>
+                        <v-list-item-title>
+                          Go to <span class="font-weight-bold">Profile → API Management</span>
+                        </v-list-item-title>
+                      </v-list-item>
 
-        <button @click="showInstructions = false"
-                class="mt-4 w-full bg-gray-600 hover:bg-gray-500 text-white py-2 rounded transition-colors">
-          Got it, continue to setup
-        </button>
-      </div>
+                      <v-list-item>
+                        <template v-slot:prepend>
+                          <v-chip color="primary" size="small" class="font-weight-bold">3</v-chip>
+                        </template>
+                        <v-list-item-title>
+                          Click <span class="font-weight-bold">"Create API"</span> and name it "Trading Bot"
+                        </v-list-item-title>
+                      </v-list-item>
 
-      <!-- API Key Form -->
-      <form v-else @submit.prevent="handleSubmit" class="space-y-6">
-        <!-- API Key Input -->
-        <div>
-          <label class="block text-sm font-medium text-gray-300 mb-2">
-            Binance API Key
-          </label>
-          <input
-            v-model="apiKey"
-            type="text"
-            placeholder="Enter your Binance API Key"
-            class="w-full bg-gray-700 border border-gray-600 rounded px-4 py-3 text-gray-100 font-mono text-sm focus:outline-none focus:border-blue-500"
-            @input="error = ''"
-          />
-        </div>
+                      <v-list-item>
+                        <template v-slot:prepend>
+                          <v-chip color="primary" size="small" class="font-weight-bold">4</v-chip>
+                        </template>
+                        <v-list-item-title>Complete 2FA verification</v-list-item-title>
+                      </v-list-item>
 
-        <!-- API Secret Input -->
-        <div>
-          <label class="block text-sm font-medium text-gray-300 mb-2">
-            Binance API Secret
-          </label>
-          <input
-            v-model="apiSecret"
-            :type="showSecret ? 'text' : 'password'"
-            placeholder="Enter your Binance API Secret"
-            class="w-full bg-gray-700 border border-gray-600 rounded px-4 py-3 text-gray-100 font-mono text-sm focus:outline-none focus:border-blue-500"
-            @input="error = ''"
-          />
-          <label class="flex items-center mt-2 text-sm text-gray-400 cursor-pointer">
-            <input v-model="showSecret" type="checkbox" class="mr-2">
-            Show secret
-          </label>
-        </div>
+                      <v-list-item>
+                        <template v-slot:prepend>
+                          <v-chip color="primary" size="small" class="font-weight-bold">5</v-chip>
+                        </template>
+                        <v-list-item-title>
+                          Copy your <span class="font-weight-bold">API Key</span> and
+                          <span class="font-weight-bold">Secret Key</span>
+                        </v-list-item-title>
+                      </v-list-item>
+                    </v-list>
+                  </v-card-text>
+                </v-card>
 
-        <!-- Error Message -->
-        <div v-if="error" class="bg-red-900 bg-opacity-30 border border-red-700 rounded p-3">
-          <p class="text-red-400 text-sm">{{ error }}</p>
-        </div>
+                <!-- Security Warning -->
+                <v-alert type="error" variant="tonal" prominent class="mb-4">
+                  <v-alert-title class="text-h6 mb-3">
+                    <v-icon icon="mdi-shield-alert" class="mr-2"></v-icon>
+                    IMPORTANT Security Settings
+                  </v-alert-title>
+                  <v-list density="compact" bg-color="transparent">
+                    <v-list-item>
+                      <template v-slot:prepend>
+                        <v-icon icon="mdi-check-circle" color="success" size="small"></v-icon>
+                      </template>
+                      <v-list-item-title>Enable "Enable Trading"</v-list-item-title>
+                    </v-list-item>
+                    <v-list-item>
+                      <template v-slot:prepend>
+                        <v-icon icon="mdi-close-circle" color="error" size="small"></v-icon>
+                      </template>
+                      <v-list-item-title class="font-weight-bold">
+                        DISABLE "Enable Withdrawals" (for security!)
+                      </v-list-item-title>
+                    </v-list-item>
+                    <v-list-item>
+                      <template v-slot:prepend>
+                        <v-icon icon="mdi-check-circle" color="success" size="small"></v-icon>
+                      </template>
+                      <v-list-item-title>Consider restricting to your IP address</v-list-item-title>
+                    </v-list-item>
+                  </v-list>
+                </v-alert>
 
-        <!-- Success Message -->
-        <div v-if="success" class="bg-green-900 bg-opacity-30 border border-green-700 rounded p-3">
-          <p class="text-green-400 text-sm">✓ API keys saved successfully!</p>
-        </div>
+                <!-- Testing Info -->
+                <v-alert type="info" variant="tonal" class="mb-4">
+                  <v-alert-title class="text-h6 mb-2">
+                    <v-icon icon="mdi-lightbulb-on" class="mr-2"></v-icon>
+                    For Testing
+                  </v-alert-title>
+                  <div>
+                    Use
+                    <a
+                      href="https://testnet.binance.vision"
+                      target="_blank"
+                      class="text-info font-weight-bold text-decoration-underline"
+                    >
+                      Binance Testnet
+                    </a>
+                    to test with fake money before using real funds.
+                  </div>
+                </v-alert>
 
-        <!-- Buttons -->
-        <div class="space-y-3">
-          <button
-            type="submit"
-            :disabled="!apiKey || !apiSecret || loading"
-            class="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-semibold py-3 px-4 rounded transition-colors"
-          >
-            {{ loading ? 'Saving...' : 'Save API Keys' }}
-          </button>
+                <v-btn
+                  block
+                  size="x-large"
+                  color="primary"
+                  @click="showInstructions = false"
+                >
+                  Got it, continue to setup
+                </v-btn>
+              </v-card-text>
 
-          <button
-            type="button"
-            @click="showInstructions = true"
-            class="w-full bg-gray-700 hover:bg-gray-600 text-gray-300 py-2 px-4 rounded transition-colors text-sm"
-          >
-            ← Back to instructions
-          </button>
-        </div>
+              <!-- API Key Form -->
+              <v-card-text v-else class="pa-6">
+                <v-form @submit.prevent="handleSubmit">
+                  <!-- API Key Input -->
+                  <v-text-field
+                    v-model="apiKey"
+                    label="Binance API Key"
+                    placeholder="Enter your Binance API Key"
+                    variant="outlined"
+                    density="comfortable"
+                    prepend-inner-icon="mdi-key"
+                    class="mb-4 mono-font"
+                    @input="error = ''"
+                  ></v-text-field>
 
-        <!-- Security Note -->
-        <div class="text-xs text-gray-500 text-center space-y-1">
-          <p>🔒 Your API keys are stored locally on your computer</p>
-          <p>Never shared or transmitted anywhere</p>
-          <p>Encrypted file location: <code class="text-gray-400">~/.config/trading-bot/.env</code></p>
-        </div>
-      </form>
-    </div>
-  </div>
+                  <!-- API Secret Input -->
+                  <v-text-field
+                    v-model="apiSecret"
+                    label="Binance API Secret"
+                    placeholder="Enter your Binance API Secret"
+                    variant="outlined"
+                    density="comfortable"
+                    prepend-inner-icon="mdi-lock"
+                    :type="showSecret ? 'text' : 'password'"
+                    :append-inner-icon="showSecret ? 'mdi-eye-off' : 'mdi-eye'"
+                    @click:append-inner="showSecret = !showSecret"
+                    class="mb-4 mono-font"
+                    @input="error = ''"
+                  ></v-text-field>
+
+                  <!-- Error Message -->
+                  <v-alert v-if="error" type="error" variant="tonal" class="mb-4" closable>
+                    {{ error }}
+                  </v-alert>
+
+                  <!-- Success Message -->
+                  <v-alert v-if="success" type="success" variant="tonal" class="mb-4">
+                    <v-icon icon="mdi-check-circle" class="mr-2"></v-icon>
+                    API keys saved successfully!
+                  </v-alert>
+
+                  <!-- Buttons -->
+                  <v-btn
+                    type="submit"
+                    block
+                    size="x-large"
+                    color="primary"
+                    :disabled="!apiKey || !apiSecret || loading"
+                    :loading="loading"
+                    class="mb-3"
+                  >
+                    Save API Keys
+                  </v-btn>
+
+                  <v-btn
+                    block
+                    size="large"
+                    variant="outlined"
+                    @click="showInstructions = true"
+                  >
+                    <v-icon icon="mdi-arrow-left" class="mr-2"></v-icon>
+                    Back to instructions
+                  </v-btn>
+
+                  <!-- Security Note -->
+                  <v-card variant="tonal" color="grey-darken-3" class="mt-6">
+                    <v-card-text class="text-center">
+                      <div class="text-body-2 mb-2">
+                        <v-icon icon="mdi-lock-outline" size="small" class="mr-1"></v-icon>
+                        Your API keys are stored locally on your computer
+                      </div>
+                      <div class="text-caption text-medium-emphasis">
+                        Never shared or transmitted anywhere
+                      </div>
+                      <div class="text-caption text-medium-emphasis mono-font mt-1">
+                        ~/.config/trading-bot/.env
+                      </div>
+                    </v-card-text>
+                  </v-card>
+                </v-form>
+              </v-card-text>
+            </v-card>
+          </v-col>
+        </v-row>
+      </v-container>
+    </v-card>
+  </v-dialog>
 </template>
 
 <script>
@@ -153,7 +253,6 @@ export default {
       loading.value = true
 
       try {
-        // Validate
         if (!apiKey.value.trim()) {
           error.value = 'API Key is required'
           loading.value = false
@@ -166,12 +265,9 @@ export default {
           return
         }
 
-        // Save to backend
         await SaveAPIKeys(apiKey.value.trim(), apiSecret.value.trim())
-
         success.value = true
 
-        // Emit completion after short delay
         setTimeout(() => {
           emit('setup-complete')
         }, 1000)
@@ -196,3 +292,9 @@ export default {
   }
 }
 </script>
+
+<style scoped>
+.mono-font :deep(input) {
+  font-family: 'Courier New', Courier, monospace;
+}
+</style>
