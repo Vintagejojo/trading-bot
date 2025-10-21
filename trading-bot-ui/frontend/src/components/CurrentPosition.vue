@@ -1,56 +1,62 @@
 <template>
-  <div class="bg-gray-800 rounded-lg p-6 border border-gray-700">
-    <h2 class="text-xl font-semibold mb-4 text-blue-400">Current Position</h2>
+  <v-card>
+    <v-card-title class="d-flex align-center">
+      <v-icon icon="mdi-wallet" class="mr-2" color="warning"></v-icon>
+      Current Position
+    </v-card-title>
 
-    <div v-if="!position || !position.is_open" class="text-center py-6 text-gray-400">
-      <div class="text-4xl mb-2">💼</div>
-      <p class="text-sm">No open position</p>
-    </div>
-
-    <div v-else class="space-y-4">
-      <!-- Position Info -->
-      <div class="bg-gray-700 rounded p-4 space-y-3">
-        <div class="flex justify-between items-center">
-          <span class="text-sm text-gray-400">Symbol</span>
-          <span class="text-lg font-semibold text-gray-100">{{ position.symbol }}</span>
-        </div>
-
-        <div class="flex justify-between items-center">
-          <span class="text-sm text-gray-400">Quantity</span>
-          <span class="text-lg font-mono text-gray-100">
-            {{ formatNumber(position.quantity) }}
-          </span>
-        </div>
-
-        <div class="flex justify-between items-center">
-          <span class="text-sm text-gray-400">Entry Price</span>
-          <span class="text-lg font-mono text-gray-100">
-            {{ position.entry_price?.toFixed(8) }}
-          </span>
-        </div>
-
-        <div class="flex justify-between items-center">
-          <span class="text-sm text-gray-400">Entry Time</span>
-          <span class="text-sm text-gray-300">
-            {{ formatDateTime(position.entry_time) }}
-          </span>
-        </div>
-
-        <div class="flex justify-between items-center">
-          <span class="text-sm text-gray-400">Strategy</span>
-          <span class="text-xs bg-blue-900 text-blue-300 px-2 py-1 rounded uppercase">
-            {{ position.strategy }}
-          </span>
-        </div>
+    <v-card-text>
+      <div v-if="!position || !position.is_open" class="text-center py-8 text-grey">
+        <v-icon icon="mdi-briefcase-outline" size="64" class="mb-2"></v-icon>
+        <p>No open position</p>
+        <p class="text-caption">Waiting for trade signal...</p>
       </div>
 
-      <!-- Status Badge -->
-      <div class="flex items-center justify-center space-x-2 text-green-400">
-        <span class="w-2 h-2 bg-green-400 rounded-full animate-pulse"></span>
-        <span class="text-sm font-medium">Position Open</span>
+      <div v-else>
+        <v-list>
+          <v-list-item>
+            <v-list-item-title>Symbol</v-list-item-title>
+            <template v-slot:append>
+              <strong>{{ position.symbol }}</strong>
+            </template>
+          </v-list-item>
+
+          <v-list-item>
+            <v-list-item-title>Quantity</v-list-item-title>
+            <template v-slot:append>
+              <span class="font-mono">{{ formatNumber(position.quantity) }}</span>
+            </template>
+          </v-list-item>
+
+          <v-list-item>
+            <v-list-item-title>Entry Price</v-list-item-title>
+            <template v-slot:append>
+              <span class="font-mono">${{ position.entry_price?.toFixed(8) }}</span>
+            </template>
+          </v-list-item>
+
+          <v-list-item>
+            <v-list-item-title>Entry Time</v-list-item-title>
+            <template v-slot:append>
+              <span class="text-caption">{{ formatDateTime(position.entry_time) }}</span>
+            </template>
+          </v-list-item>
+
+          <v-list-item>
+            <v-list-item-title>Strategy</v-list-item-title>
+            <template v-slot:append>
+              <v-chip size="small" color="primary">{{ position.strategy }}</v-chip>
+            </template>
+          </v-list-item>
+        </v-list>
+
+        <v-alert color="success" variant="tonal" class="mt-4">
+          <v-icon icon="mdi-check-circle" start></v-icon>
+          Position Open
+        </v-alert>
       </div>
-    </div>
-  </div>
+    </v-card-text>
+  </v-card>
 </template>
 
 <script>
@@ -65,11 +71,8 @@ export default {
   setup() {
     const formatNumber = (num) => {
       if (!num) return '0'
-      if (num >= 1000000) {
-        return (num / 1000000).toFixed(2) + 'M'
-      } else if (num >= 1000) {
-        return (num / 1000).toFixed(2) + 'K'
-      }
+      if (num >= 1000000) return (num / 1000000).toFixed(2) + 'M'
+      if (num >= 1000) return (num / 1000).toFixed(2) + 'K'
       return num.toLocaleString()
     }
 
@@ -85,10 +88,7 @@ export default {
       })
     }
 
-    return {
-      formatNumber,
-      formatDateTime
-    }
+    return { formatNumber, formatDateTime }
   }
 }
 </script>

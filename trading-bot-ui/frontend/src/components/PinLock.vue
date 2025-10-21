@@ -1,74 +1,97 @@
 <template>
-  <div class="fixed inset-0 bg-gray-900 flex items-center justify-center z-50">
-    <div class="bg-gray-800 rounded-lg p-8 border border-gray-700 max-w-md w-full">
-      <!-- Lock Icon -->
-      <div class="text-center mb-6">
-        <div class="text-6xl mb-4">🔒</div>
-        <h2 class="text-2xl font-bold text-blue-400">
-          {{ hasPin ? 'Enter PIN' : 'Set PIN' }}
-        </h2>
-        <p class="text-gray-400 text-sm mt-2">
-          {{ hasPin ? 'Unlock to access trading bot' : 'Create a PIN to secure your trading bot' }}
-        </p>
-      </div>
+  <v-app>
+    <v-main class="d-flex align-center justify-center" style="min-height: 100vh;">
+      <v-container>
+        <v-row justify="center">
+          <v-col cols="12" sm="8" md="6" lg="4">
+            <v-card elevation="8">
+              <v-card-text class="text-center pa-8">
+                <!-- Lock Icon -->
+                <v-icon icon="mdi-lock" size="80" color="primary" class="mb-4"></v-icon>
 
-      <!-- PIN Input -->
-      <form @submit.prevent="handleSubmit" class="space-y-4">
-        <div>
-          <input
-            v-model="pin"
-            type="password"
-            :placeholder="hasPin ? 'Enter PIN' : 'Create PIN (min 4 digits)'"
-            maxlength="10"
-            class="w-full bg-gray-700 border border-gray-600 rounded px-4 py-3 text-gray-100 text-center text-lg tracking-widest focus:outline-none focus:border-blue-500"
-            autofocus
-            @input="error = ''"
-          />
-        </div>
+                <h2 class="text-h4 font-weight-bold mb-2">
+                  {{ hasPin ? 'Enter PIN' : 'Set PIN' }}
+                </h2>
+                <p class="text-body-2 text-grey mb-6">
+                  {{ hasPin ? 'Unlock to access trading bot' : 'Create a PIN to secure your trading bot' }}
+                </p>
 
-        <!-- Confirm PIN (only for setup) -->
-        <div v-if="!hasPin">
-          <input
-            v-model="confirmPin"
-            type="password"
-            placeholder="Confirm PIN"
-            maxlength="10"
-            class="w-full bg-gray-700 border border-gray-600 rounded px-4 py-3 text-gray-100 text-center text-lg tracking-widest focus:outline-none focus:border-blue-500"
-            @input="error = ''"
-          />
-        </div>
+                <!-- PIN Input -->
+                <v-form @submit.prevent="handleSubmit">
+                  <v-text-field
+                    v-model="pin"
+                    type="password"
+                    :label="hasPin ? 'Enter PIN' : 'Create PIN (min 4 digits)'"
+                    variant="outlined"
+                    density="comfortable"
+                    maxlength="10"
+                    autofocus
+                    class="mb-4 text-center"
+                    @input="error = ''"
+                  ></v-text-field>
 
-        <!-- Error Message -->
-        <div v-if="error" class="text-red-400 text-sm text-center">
-          {{ error }}
-        </div>
+                  <!-- Confirm PIN (only for setup) -->
+                  <v-text-field
+                    v-if="!hasPin"
+                    v-model="confirmPin"
+                    type="password"
+                    label="Confirm PIN"
+                    variant="outlined"
+                    density="comfortable"
+                    maxlength="10"
+                    class="mb-4"
+                    @input="error = ''"
+                  ></v-text-field>
 
-        <!-- Submit Button -->
-        <button
-          type="submit"
-          class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-4 rounded transition-colors"
-        >
-          {{ hasPin ? 'Unlock' : 'Set PIN' }}
-        </button>
+                  <!-- Error Message -->
+                  <v-alert
+                    v-if="error"
+                    type="error"
+                    variant="tonal"
+                    class="mb-4"
+                  >
+                    {{ error }}
+                  </v-alert>
 
-        <!-- Skip PIN (only on first setup) -->
-        <button
-          v-if="!hasPin"
-          type="button"
-          @click="handleSkip"
-          class="w-full bg-gray-700 hover:bg-gray-600 text-gray-300 font-semibold py-2 px-4 rounded transition-colors text-sm"
-        >
-          Skip (Not Recommended)
-        </button>
-      </form>
+                  <!-- Submit Button -->
+                  <v-btn
+                    type="submit"
+                    block
+                    size="large"
+                    color="primary"
+                    class="mb-3"
+                  >
+                    {{ hasPin ? 'Unlock' : 'Set PIN' }}
+                  </v-btn>
 
-      <!-- Info Text -->
-      <div class="mt-6 text-xs text-gray-500 text-center">
-        <p>Your PIN is stored securely using SHA-256 hashing</p>
-        <p class="mt-1">Never shared or transmitted</p>
-      </div>
-    </div>
-  </div>
+                  <!-- Skip PIN (only on first setup) -->
+                  <v-btn
+                    v-if="!hasPin"
+                    block
+                    variant="outlined"
+                    color="grey"
+                    @click="handleSkip"
+                  >
+                    Skip (Not Recommended)
+                  </v-btn>
+                </v-form>
+
+                <!-- Info Text -->
+                <div class="mt-6">
+                  <p class="text-caption text-grey">
+                    Your PIN is stored securely using SHA-256 hashing
+                  </p>
+                  <p class="text-caption text-grey">
+                    Never shared or transmitted
+                  </p>
+                </div>
+              </v-card-text>
+            </v-card>
+          </v-col>
+        </v-row>
+      </v-container>
+    </v-main>
+  </v-app>
 </template>
 
 <script>

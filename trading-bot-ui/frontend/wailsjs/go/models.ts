@@ -224,6 +224,22 @@ export namespace main {
 	        this.description = source["description"];
 	    }
 	}
+	export class WalletBalance {
+	    asset: string;
+	    free: string;
+	    locked: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new WalletBalance(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.asset = source["asset"];
+	        this.free = source["free"];
+	        this.locked = source["locked"];
+	    }
+	}
 
 }
 

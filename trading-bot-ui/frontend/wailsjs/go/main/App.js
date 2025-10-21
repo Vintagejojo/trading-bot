@@ -46,6 +46,10 @@ export function GetTradesByDateRange(arg1, arg2) {
   return window['go']['main']['App']['GetTradesByDateRange'](arg1, arg2);
 }
 
+export function GetWalletBalance() {
+  return window['go']['main']['App']['GetWalletBalance']();
+}
+
 export function HasPIN() {
   return window['go']['main']['App']['HasPIN']();
 }

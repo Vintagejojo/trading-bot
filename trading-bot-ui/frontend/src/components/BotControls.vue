@@ -1,135 +1,220 @@
 <template>
-  <div class="bg-gray-800 rounded-lg p-6 border border-gray-700">
-    <h2 class="text-xl font-semibold mb-4 text-blue-400">Bot Controls</h2>
+  <v-card>
+    <v-card-title class="d-flex align-center">
+      <v-icon icon="mdi-cog" class="mr-2" color="primary"></v-icon>
+      Bot Controls
+    </v-card-title>
 
-    <div v-if="!botStatus.running" class="space-y-4">
-      <!-- Strategy Selection -->
-      <div>
-        <label class="block text-sm font-medium text-gray-300 mb-2">Strategy</label>
-        <select v-model="config.strategy" @change="loadStrategyParams"
-                class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-gray-100 focus:outline-none focus:border-blue-500">
-          <option value="rsi">RSI - Mean Reversion</option>
-          <option value="macd">MACD - Trend Following</option>
-          <option value="bbands">Bollinger Bands - Volatility</option>
-        </select>
+    <v-card-text>
+      <!-- Bot Not Running - Show Config -->
+      <div v-if="!botStatus.running">
+        <v-select
+          v-model="config.strategy"
+          :items="strategies"
+          label="Strategy"
+          variant="outlined"
+          density="comfortable"
+          @update:model-value="loadStrategyParams"
+        ></v-select>
+
+        <v-select
+          v-model="config.symbol"
+          :items="tradingPairs"
+          item-title="label"
+          item-value="symbol"
+          label="Trading Pair"
+          variant="outlined"
+          density="comfortable"
+          class="mt-3"
+        >
+          <template v-slot:item="{ props, item }">
+            <v-list-item v-bind="props">
+              <v-list-item-subtitle>{{ item.raw.info }}</v-list-item-subtitle>
+            </v-list-item>
+          </template>
+        </v-select>
+
+        <v-text-field
+          v-model.number="config.quantity"
+          label="Quantity"
+          type="number"
+          step="0.00000001"
+          variant="outlined"
+          density="comfortable"
+          class="mt-3"
+        ></v-text-field>
+
+        <!-- RSI Parameters -->
+        <v-expand-transition>
+          <v-card v-if="config.strategy === 'rsi'" variant="outlined" class="mt-3">
+            <v-card-subtitle>RSI Parameters</v-card-subtitle>
+            <v-card-text>
+              <v-text-field
+                v-model.number="config.params.period"
+                label="RSI Period"
+                type="number"
+                min="2"
+                max="100"
+                variant="outlined"
+                density="compact"
+              ></v-text-field>
+
+              <v-text-field
+                v-model.number="config.params.overbought_level"
+                label="Overbought Level"
+                type="number"
+                min="50"
+                max="100"
+                variant="outlined"
+                density="compact"
+                class="mt-2"
+              ></v-text-field>
+
+              <v-text-field
+                v-model.number="config.params.oversold_level"
+                label="Oversold Level"
+                type="number"
+                min="0"
+                max="50"
+                variant="outlined"
+                density="compact"
+                class="mt-2"
+              ></v-text-field>
+            </v-card-text>
+          </v-card>
+        </v-expand-transition>
+
+        <!-- MACD Parameters -->
+        <v-expand-transition>
+          <v-card v-if="config.strategy === 'macd'" variant="outlined" class="mt-3">
+            <v-card-subtitle>MACD Parameters</v-card-subtitle>
+            <v-card-text>
+              <v-text-field
+                v-model.number="config.params.fast_period"
+                label="Fast Period"
+                type="number"
+                min="2"
+                variant="outlined"
+                density="compact"
+              ></v-text-field>
+
+              <v-text-field
+                v-model.number="config.params.slow_period"
+                label="Slow Period"
+                type="number"
+                min="2"
+                variant="outlined"
+                density="compact"
+                class="mt-2"
+              ></v-text-field>
+
+              <v-text-field
+                v-model.number="config.params.signal_period"
+                label="Signal Period"
+                type="number"
+                min="2"
+                variant="outlined"
+                density="compact"
+                class="mt-2"
+              ></v-text-field>
+            </v-card-text>
+          </v-card>
+        </v-expand-transition>
+
+        <!-- Bollinger Bands Parameters -->
+        <v-expand-transition>
+          <v-card v-if="config.strategy === 'bbands'" variant="outlined" class="mt-3">
+            <v-card-subtitle>Bollinger Bands Parameters</v-card-subtitle>
+            <v-card-text>
+              <v-text-field
+                v-model.number="config.params.period"
+                label="Period"
+                type="number"
+                min="2"
+                variant="outlined"
+                density="compact"
+              ></v-text-field>
+
+              <v-text-field
+                v-model.number="config.params.std_dev"
+                label="Std Dev Multiplier"
+                type="number"
+                step="0.1"
+                min="0.5"
+                variant="outlined"
+                density="compact"
+                class="mt-2"
+              ></v-text-field>
+            </v-card-text>
+          </v-card>
+        </v-expand-transition>
+
+        <v-checkbox
+          v-model="config.paperTrading"
+          label="Paper Trading (Recommended)"
+          color="info"
+          class="mt-3"
+        ></v-checkbox>
+
+        <v-btn
+          block
+          size="large"
+          color="success"
+          prepend-icon="mdi-play"
+          @click="handleStart"
+          class="mt-4"
+        >
+          Start Bot
+        </v-btn>
       </div>
 
-      <!-- Trading Pair Selection -->
-      <div>
-        <label class="block text-sm font-medium text-gray-300 mb-2">Trading Pair</label>
-        <select v-model="config.symbol"
-                class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-gray-100 focus:outline-none focus:border-blue-500">
-          <option v-for="pair in tradingPairs" :key="pair.symbol" :value="pair.symbol">
-            {{ pair.symbol }} - {{ pair.description }}
-          </option>
-        </select>
-        <p class="mt-1 text-xs text-gray-500">{{ getSelectedPairInfo() }}</p>
+      <!-- Bot Running - Show Status -->
+      <div v-else>
+        <v-list>
+          <v-list-item>
+            <v-list-item-title>Strategy</v-list-item-title>
+            <template v-slot:append>
+              <v-chip color="primary" size="small">{{ botStatus.strategy.toUpperCase() }}</v-chip>
+            </template>
+          </v-list-item>
+
+          <v-list-item>
+            <v-list-item-title>Symbol</v-list-item-title>
+            <template v-slot:append>
+              <strong>{{ botStatus.symbol }}</strong>
+            </template>
+          </v-list-item>
+
+          <v-list-item>
+            <v-list-item-title>Mode</v-list-item-title>
+            <template v-slot:append>
+              <v-chip
+                :color="botStatus.trading_mode === 'live' ? 'error' : 'info'"
+                size="small"
+              >
+                {{ botStatus.trading_mode.toUpperCase() }}
+              </v-chip>
+            </template>
+          </v-list-item>
+        </v-list>
+
+        <v-btn
+          block
+          size="large"
+          color="error"
+          prepend-icon="mdi-stop"
+          @click="handleStop"
+          class="mt-4"
+        >
+          Stop Bot
+        </v-btn>
       </div>
-
-      <!-- Quantity Input -->
-      <div>
-        <label class="block text-sm font-medium text-gray-300 mb-2">Quantity</label>
-        <input v-model.number="config.quantity" type="number" step="0.00000001"
-               class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-gray-100 focus:outline-none focus:border-blue-500">
-      </div>
-
-      <!-- Strategy Parameters -->
-      <div v-if="config.strategy === 'rsi'" class="space-y-3">
-        <div>
-          <label class="block text-sm font-medium text-gray-300 mb-2">RSI Period</label>
-          <input v-model.number="config.params.period" type="number" min="2" max="100"
-                 class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-gray-100 focus:outline-none focus:border-blue-500">
-        </div>
-        <div>
-          <label class="block text-sm font-medium text-gray-300 mb-2">Overbought Level</label>
-          <input v-model.number="config.params.overbought_level" type="number" min="50" max="100"
-                 class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-gray-100 focus:outline-none focus:border-blue-500">
-        </div>
-        <div>
-          <label class="block text-sm font-medium text-gray-300 mb-2">Oversold Level</label>
-          <input v-model.number="config.params.oversold_level" type="number" min="0" max="50"
-                 class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-gray-100 focus:outline-none focus:border-blue-500">
-        </div>
-      </div>
-
-      <div v-if="config.strategy === 'macd'" class="space-y-3">
-        <div>
-          <label class="block text-sm font-medium text-gray-300 mb-2">Fast Period</label>
-          <input v-model.number="config.params.fast_period" type="number" min="2"
-                 class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-gray-100 focus:outline-none focus:border-blue-500">
-        </div>
-        <div>
-          <label class="block text-sm font-medium text-gray-300 mb-2">Slow Period</label>
-          <input v-model.number="config.params.slow_period" type="number" min="2"
-                 class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-gray-100 focus:outline-none focus:border-blue-500">
-        </div>
-        <div>
-          <label class="block text-sm font-medium text-gray-300 mb-2">Signal Period</label>
-          <input v-model.number="config.params.signal_period" type="number" min="2"
-                 class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-gray-100 focus:outline-none focus:border-blue-500">
-        </div>
-      </div>
-
-      <div v-if="config.strategy === 'bbands'" class="space-y-3">
-        <div>
-          <label class="block text-sm font-medium text-gray-300 mb-2">Period</label>
-          <input v-model.number="config.params.period" type="number" min="2"
-                 class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-gray-100 focus:outline-none focus:border-blue-500">
-        </div>
-        <div>
-          <label class="block text-sm font-medium text-gray-300 mb-2">Std Dev Multiplier</label>
-          <input v-model.number="config.params.std_dev" type="number" step="0.1" min="0.5"
-                 class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-gray-100 focus:outline-none focus:border-blue-500">
-        </div>
-      </div>
-
-      <!-- Paper Trading Toggle -->
-      <div class="flex items-center space-x-3 py-2">
-        <input v-model="config.paperTrading" type="checkbox" id="paperTrading"
-               class="w-4 h-4 text-blue-600 bg-gray-700 border-gray-600 rounded focus:ring-blue-500">
-        <label for="paperTrading" class="text-sm font-medium text-gray-300">
-          Paper Trading (Recommended)
-        </label>
-      </div>
-
-      <!-- Start Button -->
-      <button @click="handleStart"
-              class="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-4 rounded transition-colors">
-        Start Bot
-      </button>
-    </div>
-
-    <!-- Running State -->
-    <div v-else class="space-y-4">
-      <div class="bg-gray-700 rounded p-4 space-y-2">
-        <div class="flex justify-between text-sm">
-          <span class="text-gray-400">Strategy:</span>
-          <span class="text-gray-100 font-medium uppercase">{{ botStatus.strategy }}</span>
-        </div>
-        <div class="flex justify-between text-sm">
-          <span class="text-gray-400">Symbol:</span>
-          <span class="text-gray-100 font-medium">{{ botStatus.symbol }}</span>
-        </div>
-        <div class="flex justify-between text-sm">
-          <span class="text-gray-400">Mode:</span>
-          <span :class="botStatus.trading_mode === 'live' ? 'text-red-400' : 'text-blue-400'"
-                class="font-medium uppercase">
-            {{ botStatus.trading_mode }}
-          </span>
-        </div>
-      </div>
-
-      <!-- Stop Button -->
-      <button @click="handleStop"
-              class="w-full bg-red-600 hover:bg-red-700 text-white font-semibold py-3 px-4 rounded transition-colors">
-        Stop Bot
-      </button>
-    </div>
-  </div>
+    </v-card-text>
+  </v-card>
 </template>
 
 <script>
-import { ref, watch } from 'vue'
+import { ref } from 'vue'
 import { GetDefaultStrategyParams } from '../../wailsjs/go/main/App'
 
 export default {
@@ -142,73 +227,24 @@ export default {
   },
   emits: ['start-bot', 'stop-bot'],
   setup(props, { emit }) {
+    const strategies = [
+      { title: 'RSI - Mean Reversion', value: 'rsi' },
+      { title: 'MACD - Trend Following', value: 'macd' },
+      { title: 'Bollinger Bands - Volatility', value: 'bbands' }
+    ]
+
     const tradingPairs = [
-      {
-        symbol: 'BTCUSDT',
-        description: 'Bitcoin/USDT',
-        strategy: 'Momentum & RSI',
-        info: 'Unmatched liquidity, ideal for momentum and RSI-based strategies'
-      },
-      {
-        symbol: 'BTCETH',
-        description: 'Bitcoin/Ethereum',
-        strategy: 'Trend Following & Divergence',
-        info: 'Track relative strength between top two cryptocurrencies'
-      },
-      {
-        symbol: 'BTCBNB',
-        description: 'Bitcoin/BNB',
-        strategy: 'High Volatility',
-        info: 'Binance ecosystem influence with high volatility opportunities'
-      },
-      {
-        symbol: 'BTCSOL',
-        description: 'Bitcoin/Solana',
-        strategy: 'Swing Trading',
-        info: 'Capitalize on Solana growth with swing trading opportunities'
-      },
-      {
-        symbol: 'BTCXRP',
-        description: 'Bitcoin/Ripple',
-        strategy: 'Breakout & Reversal',
-        info: 'High volume breakout and reversal strategies'
-      },
-      {
-        symbol: 'BTCADA',
-        description: 'Bitcoin/Cardano',
-        strategy: 'Bollinger Bands & Stochastic',
-        info: 'Smoother price action, compatible with BB and Stochastic setups'
-      },
-      {
-        symbol: 'BTCDOGE',
-        description: 'Bitcoin/Dogecoin',
-        strategy: 'Scalping',
-        info: 'Meme coin volatility perfect for short-term scalping bots'
-      },
-      {
-        symbol: 'BTCLINK',
-        description: 'Bitcoin/Chainlink',
-        strategy: 'DeFi Mid-Cap',
-        info: 'DeFi relevance with solid mid-cap behavior'
-      },
-      {
-        symbol: 'BTCMATIC',
-        description: 'Bitcoin/Polygon',
-        strategy: 'Ecosystem Trends',
-        info: 'Follow Polygon scaling narrative and ecosystem-driven trends'
-      },
-      {
-        symbol: 'BTCAVAX',
-        description: 'Bitcoin/Avalanche',
-        strategy: 'Breakout & Momentum',
-        info: 'Aligned with Avalanche expanding ecosystem'
-      },
-      {
-        symbol: 'SHIBUSDT',
-        description: 'Shiba Inu/USDT',
-        strategy: 'High Volume Meme Coin',
-        info: 'Extreme volatility with massive trading volume, ideal for aggressive scalping'
-      }
+      { symbol: 'BTCUSDT', label: 'BTCUSDT - Bitcoin/USDT', info: 'Unmatched liquidity, ideal for momentum and RSI-based strategies' },
+      { symbol: 'BTCETH', label: 'BTCETH - Bitcoin/Ethereum', info: 'Track relative strength between top two cryptocurrencies' },
+      { symbol: 'BTCBNB', label: 'BTCBNB - Bitcoin/BNB', info: 'Binance ecosystem influence with high volatility opportunities' },
+      { symbol: 'BTCSOL', label: 'BTCSOL - Bitcoin/Solana', info: 'Capitalize on Solana growth with swing trading opportunities' },
+      { symbol: 'BTCXRP', label: 'BTCXRP - Bitcoin/Ripple', info: 'High volume breakout and reversal strategies' },
+      { symbol: 'BTCADA', label: 'BTCADA - Bitcoin/Cardano', info: 'Smoother price action, compatible with BB and Stochastic setups' },
+      { symbol: 'BTCDOGE', label: 'BTCDOGE - Bitcoin/Dogecoin', info: 'Meme coin volatility perfect for short-term scalping bots' },
+      { symbol: 'BTCLINK', label: 'BTCLINK - Bitcoin/Chainlink', info: 'DeFi relevance with solid mid-cap behavior' },
+      { symbol: 'BTCMATIC', label: 'BTCMATIC - Bitcoin/Polygon', info: 'Follow Polygon scaling narrative and ecosystem-driven trends' },
+      { symbol: 'BTCAVAX', label: 'BTCAVAX - Bitcoin/Avalanche', info: 'Aligned with Avalanche expanding ecosystem' },
+      { symbol: 'SHIBUSDT', label: 'SHIBUSDT - Shiba Inu/USDT', info: 'Extreme volatility with massive trading volume, ideal for aggressive scalping' }
     ]
 
     const config = ref({
@@ -222,11 +258,6 @@ export default {
         oversold_level: 30
       }
     })
-
-    const getSelectedPairInfo = () => {
-      const pair = tradingPairs.find(p => p.symbol === config.value.symbol)
-      return pair ? `${pair.strategy} - ${pair.info}` : ''
-    }
 
     const loadStrategyParams = async () => {
       try {
@@ -255,13 +286,12 @@ export default {
       }
     }
 
-    // Load default params on mount
     loadStrategyParams()
 
     return {
+      strategies,
       tradingPairs,
       config,
-      getSelectedPairInfo,
       loadStrategyParams,
       handleStart,
       handleStop

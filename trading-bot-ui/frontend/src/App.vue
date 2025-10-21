@@ -1,66 +1,83 @@
 <template>
-  <div id="app" class="min-h-screen bg-gray-900 text-gray-100">
-    <!-- Setup Wizard (first-time API key setup) -->
+  <v-app>
+    <!-- Setup Wizard -->
     <SetupWizard v-if="!setupComplete" @setup-complete="handleSetupComplete" />
 
     <!-- PIN Lock Screen -->
     <PinLock v-else-if="isLocked" :hasPin="hasPin" @unlocked="handleUnlock" />
 
-    <!-- Main App (only shown when setup complete and unlocked) -->
-    <div v-else>
-    <!-- Header -->
-    <header class="bg-gray-800 border-b border-gray-700 px-6 py-4">
-      <div class="flex items-center justify-between">
-        <div class="flex items-center space-x-4">
-          <h1 class="text-2xl font-bold text-blue-400">Trading Bot</h1>
-          <span v-if="botStatus.running" class="flex items-center text-green-400">
-            <span class="w-2 h-2 bg-green-400 rounded-full mr-2 animate-pulse"></span>
-            Running
-          </span>
-          <span v-else class="flex items-center text-gray-400">
-            <span class="w-2 h-2 bg-gray-400 rounded-full mr-2"></span>
-            Stopped
-          </span>
-        </div>
-        <div class="flex items-center space-x-4">
-          <span v-if="botStatus.symbol" class="text-sm text-gray-400">
+    <!-- Main App -->
+    <template v-else>
+      <!-- App Bar -->
+      <v-app-bar color="surface" elevation="2">
+        <v-app-bar-title>
+          <v-icon icon="mdi-robot" class="mr-2" color="primary"></v-icon>
+          Tradecraft
+        </v-app-bar-title>
+
+        <template v-slot:append>
+          <v-chip
+            v-if="botStatus.symbol"
+            class="mr-2"
+            variant="outlined"
+            color="info"
+          >
             {{ botStatus.symbol }}
-          </span>
-          <span v-if="botStatus.trading_mode"
-                :class="botStatus.trading_mode === 'live' ? 'text-red-400' : 'text-blue-400'"
-                class="text-sm font-semibold px-3 py-1 rounded-full border"
-                :style="{ borderColor: botStatus.trading_mode === 'live' ? '#f87171' : '#60a5fa' }">
-            {{ botStatus.trading_mode === 'live' ? '🔴 LIVE' : '📝 PAPER' }}
-          </span>
-        </div>
-      </div>
-    </header>
+          </v-chip>
 
-    <!-- Main Content -->
-    <div class="container mx-auto px-6 py-8">
-      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <!-- Left Panel: Bot Controls -->
-        <div class="lg:col-span-1 space-y-6">
-          <BotControls
-            :botStatus="botStatus"
-            @start-bot="startBot"
-            @stop-bot="stopBot"
-          />
+          <v-chip
+            v-if="botStatus.trading_mode"
+            :color="botStatus.trading_mode === 'live' ? 'error' : 'info'"
+            variant="flat"
+            class="mr-2"
+          >
+            {{ botStatus.trading_mode === 'live' ? 'LIVE' : 'PAPER' }}
+          </v-chip>
 
-          <PerformanceStats :stats="stats" />
+          <v-chip
+            :color="botStatus.running ? 'success' : 'grey'"
+            variant="flat"
+          >
+            <v-icon
+              :icon="botStatus.running ? 'mdi-circle' : 'mdi-circle-outline'"
+              start
+              size="small"
+            ></v-icon>
+            {{ botStatus.running ? 'Running' : 'Stopped' }}
+          </v-chip>
+        </template>
+      </v-app-bar>
 
-          <CurrentPosition :position="botStatus.position" />
-        </div>
+      <!-- Main Content -->
+      <v-main>
+        <v-container fluid class="pa-4">
+          <v-row>
+            <!-- Left Column: Bot Controls -->
+            <v-col cols="12" lg="4">
+              <WalletBalance class="mb-4" />
 
-        <!-- Right Panel: Trade History & Charts -->
-        <div class="lg:col-span-2 space-y-6">
-          <ActivityLog />
-          <TradeHistory :trades="trades" />
-        </div>
-      </div>
-    </div>
-    </div><!-- End unlocked content -->
-  </div>
+              <BotControls
+                :botStatus="botStatus"
+                @start-bot="startBot"
+                @stop-bot="stopBot"
+              />
+
+              <PerformanceStats :stats="stats" class="mt-4" />
+
+              <CurrentPosition :position="botStatus.position" class="mt-4" />
+            </v-col>
+
+            <!-- Right Column: Activity & Trades -->
+            <v-col cols="12" lg="8">
+              <ActivityLog class="mb-4" />
+
+              <TradeHistory :trades="trades" />
+            </v-col>
+          </v-row>
+        </v-container>
+      </v-main>
+    </template>
+  </v-app>
 </template>
 
 <script>
@@ -74,6 +91,7 @@ import PerformanceStats from './components/PerformanceStats.vue'
 import CurrentPosition from './components/CurrentPosition.vue'
 import ActivityLog from './components/ActivityLog.vue'
 import TradeHistory from './components/TradeHistory.vue'
+import WalletBalance from './components/WalletBalance.vue'
 
 export default {
   name: 'App',
@@ -84,10 +102,11 @@ export default {
     PerformanceStats,
     CurrentPosition,
     ActivityLog,
-    TradeHistory
+    TradeHistory,
+    WalletBalance
   },
   setup() {
-    const setupComplete = ref(true) // Will be set to false if setup is incomplete
+    const setupComplete = ref(true)
     const isLocked = ref(true)
     const hasPin = ref(false)
     const botStatus = ref({
@@ -177,7 +196,6 @@ export default {
 
     const handleSetupComplete = async () => {
       setupComplete.value = true
-      // After setup, check if PIN is needed
       await checkLockStatus()
     }
 
@@ -187,23 +205,18 @@ export default {
     }
 
     onMounted(async () => {
-      // Check setup status first
       await checkSetupStatus()
 
-      // Only check lock status and load data if setup is complete
       if (setupComplete.value) {
         await checkLockStatus()
 
-        // Only load data if unlocked
         if (!isLocked.value) {
           refreshData()
         }
       }
 
-      // Set up auto-refresh every 5 seconds
       refreshInterval = setInterval(refreshData, 5000)
 
-      // Listen for bot events
       EventsOn('bot:started', () => {
         console.log('Bot started event received')
         refreshData()
@@ -241,19 +254,3 @@ export default {
   }
 }
 </script>
-
-<style>
-* {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
-
-body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-}
-
-#app {
-  min-height: 100vh;
-}
-</style>

@@ -3,12 +3,12 @@ module trading-bot-ui
 go 1.24.4
 
 require (
+	github.com/adshao/go-binance/v2 v2.8.4
 	github.com/wailsapp/wails/v2 v2.10.2
 	rsi-bot v0.0.0
 )
 
 require (
-	github.com/adshao/go-binance/v2 v2.8.4 // indirect
 	github.com/bep/debounce v1.2.1 // indirect
 	github.com/bitly/go-simplejson v0.5.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect

@@ -25,6 +25,8 @@ export function GetTradeSummary():Promise<database.TradeSummary>;
 
 export function GetTradesByDateRange(arg1:string,arg2:string):Promise<Array<database.Trade>>;
 
+export function GetWalletBalance():Promise<Array<main.WalletBalance>>;
+
 export function HasPIN():Promise<boolean>;
 
 export function IsLocked():Promise<boolean>;

@@ -2,3 +2,7 @@ bin/
 *.db
 *.log
 .env
+claude/
+claude_output/
+*.claude.json
+*.claude.md

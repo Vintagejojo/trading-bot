@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strings"
 	"sync"
 	"time"
 
@@ -13,8 +14,17 @@ import (
 	"rsi-bot/pkg/models"
 	"rsi-bot/pkg/strategy"
 
+	"github.com/adshao/go-binance/v2"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
+
+// Helper function for safe min calculation
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
 
 // App struct
 type App struct {
@@ -416,4 +426,83 @@ func (a *App) UpdateAPIKeys(apiKey, apiSecret string) error {
 // GetEnvFilePath returns path to .env file
 func (a *App) GetEnvFilePath() string {
 	return a.setup.GetEnvFilePath()
+}
+
+// ============= Wallet Balance Methods =============
+
+// WalletBalance represents a single asset balance
+type WalletBalance struct {
+	Asset  string `json:"asset"`
+	Free   string `json:"free"`
+	Locked string `json:"locked"`
+}
+
+// GetWalletBalance returns user's Binance wallet balances
+func (a *App) GetWalletBalance() ([]WalletBalance, error) {
+	// Get API keys from environment/setup
+	apiKey, apiSecret, err := a.setup.LoadAPIKeys()
+	if err != nil {
+		return nil, fmt.Errorf("API keys not configured: %w", err)
+	}
+
+	// Trim whitespace from keys (common issue)
+	apiKey = strings.TrimSpace(apiKey)
+	apiSecret = strings.TrimSpace(apiSecret)
+
+	if apiKey == "" || apiSecret == "" {
+		return nil, fmt.Errorf("API keys not configured")
+	}
+
+	log.Printf("API Key length: %d, Secret length: %d", len(apiKey), len(apiSecret))
+	log.Printf("API Key first 8 chars: %s...", apiKey[:min(8, len(apiKey))])
+
+	// Create Binance US client for wallet balance
+	client := binance.NewClient(apiKey, apiSecret)
+	// Use Binance US API endpoint
+	client.BaseURL = "https://api.binance.us"
+
+	// Enable debug mode to see the actual request
+	client.Debug = true
+
+	// Get server time to sync, but use a simpler approach
+	// The TimeOffset field doesn't seem to work reliably, so we'll wait to ensure our time is behind
+	log.Printf("GetWalletBalance: Starting to fetch balance...")
+	serverTime, err := client.NewServerTimeService().Do(context.Background())
+	if err != nil {
+		log.Printf("Warning: Failed to get server time: %v", err)
+	} else {
+		localTime := time.Now().UnixMilli()
+		timeOffset := serverTime - localTime
+		log.Printf("Time sync: Server=%d, Local=%d, Offset=%d ms", serverTime, localTime, timeOffset)
+
+		// If our clock is ahead of server time, wait until we're behind
+		if timeOffset < 0 {
+			// Our clock is ahead by abs(timeOffset) ms, wait a bit longer
+			sleepDuration := time.Duration(-timeOffset+1000) * time.Millisecond
+			log.Printf("Clock is %d ms ahead, waiting %v to get behind server time", -timeOffset, sleepDuration)
+			time.Sleep(sleepDuration)
+			log.Printf("Sleep complete, proceeding with account request")
+		}
+	}
+
+	// Now make the account request - our timestamp should be behind server time
+	log.Printf("Calling Binance US GetAccountService...")
+	account, err := client.NewGetAccountService().Do(context.Background())
+	if err != nil {
+		log.Printf("ERROR: GetAccountService failed: %v", err)
+		return nil, fmt.Errorf("failed to get account info: %w", err)
+	}
+	log.Printf("SUCCESS: Got account info with %d balances", len(account.Balances))
+
+	// Convert to our format
+	balances := make([]WalletBalance, 0, len(account.Balances))
+	for _, balance := range account.Balances {
+		balances = append(balances, WalletBalance{
+			Asset:  balance.Asset,
+			Free:   balance.Free,
+			Locked: balance.Locked,
+		})
+	}
+
+	return balances, nil
 }
