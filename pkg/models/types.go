@@ -1,6 +1,9 @@
 package models
 
-import "time"
+import (
+	"time"
+	"rsi-bot/pkg/safety"
+)
 
 type Config struct {
 	Symbol          string  `mapstructure:"symbol"`
@@ -17,6 +20,9 @@ type Config struct {
 
 	// Deprecated: Use Strategy config instead
 	Indicator IndicatorConfig `mapstructure:"indicator"`
+
+	// Safety & Resilience (Phase 7.5)
+	Safety safety.Config `mapstructure:"safety"`
 }
 
 // StrategyConfig defines which strategy to use

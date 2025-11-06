@@ -4,3 +4,38 @@ overbought_level: 70.0
 oversold_level: 30.0
 quantity: 150000.0
 trading_enabled: false
+
+# Safety & Resilience Features (Phase 7.5)
+safety:
+  enabled: true
+
+  # Circuit Breaker - prevents cascading failures
+  circuit_breaker:
+    max_failures: 5        # Open circuit after 5 consecutive failures
+    reset_timeout: "5m"    # Try recovery after 5 minutes
+
+  # Rate Limiting - prevents API abuse
+  rate_limit:
+    max_requests: 10       # Maximum 10 requests
+    interval: "1m"         # Per minute
+
+  # Liquidity Safeguards - ensure market depth before trading
+  liquidity:
+    min_order_book_depth: 10      # Minimum 10 orders on each side
+    min_total_volume: 100000      # Minimum total volume available
+    max_spread_percent: 0.5       # Maximum 0.5% bid-ask spread
+    min_volume_multiplier: 0.1    # Order size must be < 10% of available volume
+
+  # Position Limits - risk management
+  position_limits:
+    max_position_size_usd: 1000   # Maximum $1000 per position
+    max_portfolio_percent: 20     # Maximum 20% of portfolio in single position
+    max_daily_loss_usd: 100       # Stop trading if daily loss exceeds $100
+    max_total_positions: 3        # Maximum 3 open positions
+
+  # Smart Recovery - automatic error recovery
+  recovery:
+    strategy: "exponential"       # "immediate", "linear", or "exponential"
+    max_retries: 3                # Maximum 3 retry attempts
+    base_delay: "1s"              # Start with 1 second delay
+    max_delay: "1m"               # Cap delay at 1 minute

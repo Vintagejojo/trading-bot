@@ -17,7 +17,11 @@ export function GetDefaultStrategyParams(arg1:string):Promise<Record<string, any
 
 export function GetEnvFilePath():Promise<string>;
 
+export function GetMultiTimeframeData():Promise<Record<string, main.TimeframeChartData>>;
+
 export function GetSetupInstructions():Promise<string>;
+
+export function GetTimeframeData(arg1:string):Promise<main.TimeframeChartData>;
 
 export function GetTradeHistory(arg1:number):Promise<Array<database.Trade>>;
 

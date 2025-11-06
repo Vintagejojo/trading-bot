@@ -10,9 +10,11 @@ import (
 	"rsi-bot/pkg/database"
 	"rsi-bot/pkg/indicators"
 	"rsi-bot/pkg/models"
+	"rsi-bot/pkg/safety"
 	"rsi-bot/pkg/strategy"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/adshao/go-binance/v2"
@@ -34,6 +36,7 @@ type Bot struct {
 	strategy strategy.Strategy
 	position *models.Position
 	conn     *websocket.Conn
+	connMu   sync.Mutex // Protects conn field
 	client   *binance.Client
 	db       *database.DB
 	logs     []string
@@ -43,6 +46,9 @@ type Bot struct {
 
 	// Event callback for real-time updates to UI
 	eventCallback func(eventType string, message string, data map[string]interface{})
+
+	// Safety & Resilience (Phase 7.5)
+	safety *safety.SafetyManager
 }
 
 func New(config *models.Config) *Bot {
@@ -180,6 +186,13 @@ func New(config *models.Config) *Bot {
 		log.Printf("📍 Restored open position from database: %.0f @ %.8f", position.Quantity, position.EntryPrice)
 	}
 
+	// Initialize Safety Manager (Phase 7.5)
+	safetyMgr, err := safety.NewSafetyManager(client, config.Safety)
+	if err != nil {
+		log.Printf("⚠️  Failed to initialize safety manager: %v", err)
+		safetyMgr = nil
+	}
+
 	return &Bot{
 		config:            config,
 		strategy:          strat,
@@ -187,6 +200,7 @@ func New(config *models.Config) *Bot {
 		client:            client,
 		db:                db,
 		currentPositionID: currentPosID,
+		safety:            safetyMgr,
 	}
 }
 
@@ -244,6 +258,14 @@ func (b *Bot) Start(ctx context.Context) error {
 }
 
 func (b *Bot) connectAndRun(ctx context.Context, wsURL string) error {
+	// Check if context is already cancelled before connecting
+	select {
+	case <-ctx.Done():
+		log.Println("Context cancelled before connecting")
+		return nil
+	default:
+	}
+
 	// Create dialer with timeout and proper headers
 	dialer := websocket.Dialer{
 		HandshakeTimeout: 45 * time.Second,
@@ -274,7 +296,11 @@ func (b *Bot) connectAndRun(ctx context.Context, wsURL string) error {
 		return nil
 	})
 
+	// Store connection with mutex protection
+	b.connMu.Lock()
 	b.conn = conn
+	b.connMu.Unlock()
+
 	log.Printf("✅ Connected to %s", wsURL)
 	b.emit("bot:connected", fmt.Sprintf("Connected to %s", wsURL), map[string]interface{}{
 		"url": wsURL,
@@ -284,11 +310,17 @@ func (b *Bot) connectAndRun(ctx context.Context, wsURL string) error {
 	pingTicker := time.NewTicker(30 * time.Second)
 	defer pingTicker.Stop()
 
+	// Channel to signal goroutine completion
+	done := make(chan struct{})
+	defer close(done)
+
 	// Start ping routine in goroutine
 	go func() {
 		for {
 			select {
 			case <-ctx.Done():
+				return
+			case <-done:
 				return
 			case <-pingTicker.C:
 				if err := conn.WriteMessage(websocket.PingMessage, nil); err != nil {
@@ -299,24 +331,40 @@ func (b *Bot) connectAndRun(ctx context.Context, wsURL string) error {
 		}
 	}()
 
+	// Start goroutine to close connection when context is cancelled
+	go func() {
+		<-ctx.Done()
+		log.Println("Context cancelled, closing WebSocket connection")
+		conn.Close() // This will cause ReadMessage() to return immediately
+	}()
+
 	for {
-		select {
-		case <-ctx.Done():
-			log.Println("Context cancelled, closing connection")
-			return nil
-		default:
-			_, message, err := conn.ReadMessage()
-			if err != nil {
+		_, message, err := conn.ReadMessage()
+		if err != nil {
+			// Check if we're stopping due to context cancellation
+			select {
+			case <-ctx.Done():
+				log.Println("WebSocket closed due to context cancellation")
+				return nil
+			default:
 				if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
 					return fmt.Errorf("websocket unexpected close: %w", err)
 				}
 				return fmt.Errorf("websocket read error: %w", err)
 			}
+		}
 
-			if err := b.handleMessage(message); err != nil {
-				log.Printf("Error handling message: %v", err)
-				// Continue processing other messages
-			}
+		// Check if context is cancelled before processing message
+		select {
+		case <-ctx.Done():
+			log.Println("Context cancelled, stopping message processing")
+			return nil
+		default:
+		}
+
+		if err := b.handleMessage(message); err != nil {
+			log.Printf("Error handling message: %v", err)
+			// Continue processing other messages
 		}
 	}
 }
@@ -552,39 +600,110 @@ func (b *Bot) processSignal(indicatorValues map[string]float64, currentPrice flo
 func (b *Bot) executeBuyOrder(price float64) (string, error) {
 	log.Printf("🚀 Executing BUY order: %.0f @ %.8f", b.config.Quantity, price)
 
-	order, err := b.client.NewCreateOrderService().
-		Symbol(b.config.Symbol).
-		Side(binance.SideTypeBuy).
-		Type(binance.OrderTypeMarket). // Market order
-		Quantity(fmt.Sprintf("%.8f", b.config.Quantity)).
-		Do(context.Background())
-
-	if err != nil {
-		return "", fmt.Errorf("buy order failed: %w", err)
+	// Safety checks (Phase 7.5)
+	if b.safety != nil {
+		// Check if trade is allowed
+		if err := b.safety.CheckTradeAllowed(
+			context.Background(),
+			b.config.Symbol,
+			b.config.Quantity,
+			price,
+			"BUY",
+		); err != nil {
+			log.Printf("🛑 Trade blocked by safety checks: %v", err)
+			return "", fmt.Errorf("safety check failed: %w", err)
+		}
 	}
 
-	orderID := fmt.Sprintf("%d", order.OrderID)
-	log.Printf("✅ BUY order executed: OrderID=%s", orderID)
-	return orderID, nil
+	// Execute with safety wrapper
+	var orderID string
+	executeOrder := func() error {
+		order, err := b.client.NewCreateOrderService().
+			Symbol(b.config.Symbol).
+			Side(binance.SideTypeBuy).
+			Type(binance.OrderTypeMarket).
+			Quantity(fmt.Sprintf("%.8f", b.config.Quantity)).
+			Do(context.Background())
+
+		if err != nil {
+			return fmt.Errorf("buy order failed: %w", err)
+		}
+
+		orderID = fmt.Sprintf("%d", order.OrderID)
+		log.Printf("✅ BUY order executed: OrderID=%s", orderID)
+		return nil
+	}
+
+	// Execute with safety manager if available
+	var err error
+	if b.safety != nil {
+		err = b.safety.ExecuteWithSafety(executeOrder)
+		if err == nil {
+			b.safety.OpenPosition()
+		}
+	} else {
+		err = executeOrder()
+	}
+
+	return orderID, err
 }
 
 func (b *Bot) executeSellOrder(price float64) (string, error) {
 	log.Printf("💥 Executing SELL order: %.0f @ %.8f", b.position.Quantity, price)
 
-	order, err := b.client.NewCreateOrderService().
-		Symbol(b.config.Symbol).
-		Side(binance.SideTypeSell).
-		Type(binance.OrderTypeMarket).
-		Quantity(fmt.Sprintf("%.8f", b.position.Quantity)).
-		Do(context.Background())
-
-	if err != nil {
-		return "", fmt.Errorf("sell order failed: %w", err)
+	// Safety checks (Phase 7.5)
+	if b.safety != nil {
+		// Check if trade is allowed
+		if err := b.safety.CheckTradeAllowed(
+			context.Background(),
+			b.config.Symbol,
+			b.position.Quantity,
+			price,
+			"SELL",
+		); err != nil {
+			log.Printf("🛑 Trade blocked by safety checks: %v", err)
+			return "", fmt.Errorf("safety check failed: %w", err)
+		}
 	}
 
-	orderID := fmt.Sprintf("%d", order.OrderID)
-	log.Printf("✅ SELL order executed: OrderID=%s", orderID)
-	return orderID, nil
+	// Execute with safety wrapper
+	var orderID string
+	executeOrder := func() error {
+		order, err := b.client.NewCreateOrderService().
+			Symbol(b.config.Symbol).
+			Side(binance.SideTypeSell).
+			Type(binance.OrderTypeMarket).
+			Quantity(fmt.Sprintf("%.8f", b.position.Quantity)).
+			Do(context.Background())
+
+		if err != nil {
+			return fmt.Errorf("sell order failed: %w", err)
+		}
+
+		orderID = fmt.Sprintf("%d", order.OrderID)
+		log.Printf("✅ SELL order executed: OrderID=%s", orderID)
+		return nil
+	}
+
+	// Execute with safety manager if available
+	var err error
+	if b.safety != nil {
+		err = b.safety.ExecuteWithSafety(executeOrder)
+		if err == nil {
+			// Calculate profit/loss
+			entryValue := b.position.Quantity * b.position.EntryPrice
+			exitValue := b.position.Quantity * price
+			profitLoss := exitValue - entryValue
+			isProfit := profitLoss > 0
+
+			b.safety.RecordTrade(profitLoss, isProfit)
+			b.safety.ClosePosition()
+		}
+	} else {
+		err = executeOrder()
+	}
+
+	return orderID, err
 }
 
 // GetRecentTrades returns the most recent trades from the database
@@ -617,6 +736,25 @@ func (b *Bot) GetOpenPosition() (*database.Position, error) {
 		return nil, nil
 	}
 	return b.db.GetOpenPosition(b.config.Symbol)
+}
+
+// Stop gracefully stops the bot by closing WebSocket connection
+func (b *Bot) Stop() error {
+	b.connMu.Lock()
+	defer b.connMu.Unlock()
+
+	if b.conn != nil {
+		log.Println("🛑 Closing WebSocket connection...")
+		err := b.conn.Close()
+		b.conn = nil
+		if err != nil {
+			log.Printf("Error closing WebSocket: %v", err)
+			return err
+		}
+		log.Println("✅ WebSocket connection closed")
+	}
+
+	return nil
 }
 
 // CloseDatabase closes the database connection (call on shutdown)
@@ -684,3 +822,12 @@ func (b *Bot) emit(eventType string, message string, data map[string]interface{}
 // 3. Start bot with Start(ctx)
 
 // Note: The bot currently logs trade actions rather than executing them when TradingEnabled is false.
+
+// GetMultiTimeframeManager returns the multi-timeframe manager if using that strategy
+func (b *Bot) GetMultiTimeframeManager() *strategy.MultiTimeframeManager {
+	// Check if the current strategy is a multi-timeframe strategy
+	if mts, ok := b.strategy.(*strategy.MultiTimeframeStrategy); ok {
+		return mts.GetMultiTimeframeManager()
+	}
+	return nil
+}

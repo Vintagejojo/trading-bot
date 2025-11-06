@@ -10,19 +10,33 @@
                 <div class="d-flex flex-column align-center">
                   <div class="text-h2 mb-4">🚀</div>
                   <div class="text-h4 text-primary font-weight-bold mb-2">
-                    Welcome to Jojo's Nerd Casino
+                    Welcome to Tradecraft
                   </div>
                   <div class="text-subtitle-1 text-medium-emphasis">
-                    Let's set up your Binance API connection
+                    {{ step === 1 ? "Let's set up your Binance API connection" : "Create a PIN for security" }}
                   </div>
                 </div>
               </v-card-title>
 
               <v-divider></v-divider>
 
-              <!-- Instructions Panel -->
-              <v-card-text v-if="showInstructions" class="pa-6">
-                <v-card variant="tonal" color="primary" class="mb-4">
+              <!-- Step Indicator -->
+              <v-card-text class="pt-4 pb-0">
+                <v-stepper
+                  v-model="step"
+                  :items="['API Keys', 'Security PIN']"
+                  alt-labels
+                  flat
+                  hide-actions
+                ></v-stepper>
+              </v-card-text>
+
+              <v-divider></v-divider>
+
+              <!-- Step 1: API Keys -->
+              <v-card-text v-if="step === 1" class="pa-6">
+                <!-- Instructions Panel -->
+                <v-card v-if="showInstructions" variant="tonal" color="primary" class="mb-4">
                   <v-card-title class="text-h6">
                     <v-icon icon="mdi-information" class="mr-2"></v-icon>
                     How to Get Your API Keys
@@ -35,12 +49,8 @@
                         </template>
                         <v-list-item-title>
                           Log in to
-                          <a
-                            href="https://www.binance.com"
-                            target="_blank"
-                            class="text-primary text-decoration-underline"
-                          >
-                            Binance.com
+                          <a href="https://www.binance.us" target="_blank" class="text-primary text-decoration-underline">
+                            Binance US
                           </a>
                         </v-list-item-title>
                       </v-list-item>
@@ -49,102 +59,46 @@
                         <template v-slot:prepend>
                           <v-chip color="primary" size="small" class="font-weight-bold">2</v-chip>
                         </template>
-                        <v-list-item-title>
-                          Go to <span class="font-weight-bold">Profile → API Management</span>
-                        </v-list-item-title>
+                        <v-list-item-title>Go to Profile → API Management</v-list-item-title>
                       </v-list-item>
 
                       <v-list-item>
                         <template v-slot:prepend>
                           <v-chip color="primary" size="small" class="font-weight-bold">3</v-chip>
                         </template>
-                        <v-list-item-title>
-                          Click <span class="font-weight-bold">"Create API"</span> and name it "Trading Bot"
-                        </v-list-item-title>
+                        <v-list-item-title>Click "Create API" and complete verification</v-list-item-title>
                       </v-list-item>
 
                       <v-list-item>
                         <template v-slot:prepend>
                           <v-chip color="primary" size="small" class="font-weight-bold">4</v-chip>
                         </template>
-                        <v-list-item-title>Complete 2FA verification</v-list-item-title>
-                      </v-list-item>
-
-                      <v-list-item>
-                        <template v-slot:prepend>
-                          <v-chip color="primary" size="small" class="font-weight-bold">5</v-chip>
-                        </template>
-                        <v-list-item-title>
-                          Copy your <span class="font-weight-bold">API Key</span> and
-                          <span class="font-weight-bold">Secret Key</span>
-                        </v-list-item-title>
+                        <v-list-item-title>Copy your API Key and Secret Key</v-list-item-title>
                       </v-list-item>
                     </v-list>
+
+                    <v-divider class="my-3"></v-divider>
+
+                    <v-alert type="warning" variant="tonal" density="compact">
+                      <div class="text-subtitle-2 font-weight-bold mb-2">Security Settings:</div>
+                      <ul class="text-caption">
+                        <li>✓ Enable "Enable Trading"</li>
+                        <li>✗ DISABLE "Enable Withdrawals"</li>
+                        <li>Consider IP whitelisting for extra security</li>
+                      </ul>
+                    </v-alert>
                   </v-card-text>
+
+                  <v-card-actions>
+                    <v-spacer></v-spacer>
+                    <v-btn variant="text" @click="showInstructions = false">
+                      Got it!
+                    </v-btn>
+                  </v-card-actions>
                 </v-card>
 
-                <!-- Security Warning -->
-                <v-alert type="error" variant="tonal" prominent class="mb-4">
-                  <v-alert-title class="text-h6 mb-3">
-                    <v-icon icon="mdi-shield-alert" class="mr-2"></v-icon>
-                    IMPORTANT Security Settings
-                  </v-alert-title>
-                  <v-list density="compact" bg-color="transparent">
-                    <v-list-item>
-                      <template v-slot:prepend>
-                        <v-icon icon="mdi-check-circle" color="success" size="small"></v-icon>
-                      </template>
-                      <v-list-item-title>Enable "Enable Trading"</v-list-item-title>
-                    </v-list-item>
-                    <v-list-item>
-                      <template v-slot:prepend>
-                        <v-icon icon="mdi-close-circle" color="error" size="small"></v-icon>
-                      </template>
-                      <v-list-item-title class="font-weight-bold">
-                        DISABLE "Enable Withdrawals" (for security!)
-                      </v-list-item-title>
-                    </v-list-item>
-                    <v-list-item>
-                      <template v-slot:prepend>
-                        <v-icon icon="mdi-check-circle" color="success" size="small"></v-icon>
-                      </template>
-                      <v-list-item-title>Consider restricting to your IP address</v-list-item-title>
-                    </v-list-item>
-                  </v-list>
-                </v-alert>
-
-                <!-- Testing Info -->
-                <v-alert type="info" variant="tonal" class="mb-4">
-                  <v-alert-title class="text-h6 mb-2">
-                    <v-icon icon="mdi-lightbulb-on" class="mr-2"></v-icon>
-                    For Testing
-                  </v-alert-title>
-                  <div>
-                    Use
-                    <a
-                      href="https://testnet.binance.vision"
-                      target="_blank"
-                      class="text-info font-weight-bold text-decoration-underline"
-                    >
-                      Binance Testnet
-                    </a>
-                    to test with fake money before using real funds.
-                  </div>
-                </v-alert>
-
-                <v-btn
-                  block
-                  size="x-large"
-                  color="primary"
-                  @click="showInstructions = false"
-                >
-                  Got it, continue to setup
-                </v-btn>
-              </v-card-text>
-
-              <!-- API Key Form -->
-              <v-card-text v-else class="pa-6">
-                <v-form @submit.prevent="handleSubmit">
+                <!-- API Key Form -->
+                <form @submit.prevent="handleAPISubmit">
                   <!-- API Key Input -->
                   <v-text-field
                     v-model="apiKey"
@@ -177,12 +131,6 @@
                     {{ error }}
                   </v-alert>
 
-                  <!-- Success Message -->
-                  <v-alert v-if="success" type="success" variant="tonal" class="mb-4">
-                    <v-icon icon="mdi-check-circle" class="mr-2"></v-icon>
-                    API keys saved successfully!
-                  </v-alert>
-
                   <!-- Buttons -->
                   <v-btn
                     type="submit"
@@ -191,37 +139,100 @@
                     color="primary"
                     :disabled="!apiKey || !apiSecret || loading"
                     :loading="loading"
-                    class="mb-3"
                   >
-                    Save API Keys
+                    Continue to Security Setup
+                  </v-btn>
+
+                  <v-btn
+                    v-if="!showInstructions"
+                    block
+                    variant="text"
+                    class="mt-2"
+                    @click="showInstructions = true"
+                  >
+                    <v-icon icon="mdi-information-outline" start></v-icon>
+                    Show Instructions Again
+                  </v-btn>
+                </form>
+              </v-card-text>
+
+              <!-- Step 2: PIN Creation -->
+              <v-card-text v-else class="pa-6">
+                <v-alert type="info" variant="tonal" class="mb-4">
+                  <div class="text-subtitle-2 font-weight-bold mb-2">Create a Security PIN</div>
+                  <div class="text-caption">
+                    Your PIN will protect access to Tradecraft and your API credentials.
+                    Choose a 4-6 digit PIN that you'll remember.
+                  </div>
+                </v-alert>
+
+                <form @submit.prevent="handlePINSubmit">
+                  <!-- PIN Input -->
+                  <v-text-field
+                    v-model="pin"
+                    label="Create PIN (4-6 digits)"
+                    placeholder="Enter your PIN"
+                    variant="outlined"
+                    density="comfortable"
+                    prepend-inner-icon="mdi-lock"
+                    :type="showPin ? 'text' : 'password'"
+                    :append-inner-icon="showPin ? 'mdi-eye-off' : 'mdi-eye'"
+                    @click:append-inner="showPin = !showPin"
+                    class="mb-4"
+                    inputmode="numeric"
+                    @input="error = ''"
+                  ></v-text-field>
+
+                  <!-- Confirm PIN Input -->
+                  <v-text-field
+                    v-model="confirmPin"
+                    label="Confirm PIN"
+                    placeholder="Re-enter your PIN"
+                    variant="outlined"
+                    density="comfortable"
+                    prepend-inner-icon="mdi-lock-check"
+                    :type="showConfirmPin ? 'text' : 'password'"
+                    :append-inner-icon="showConfirmPin ? 'mdi-eye-off' : 'mdi-eye'"
+                    @click:append-inner="showConfirmPin = !showConfirmPin"
+                    class="mb-4"
+                    inputmode="numeric"
+                    @input="error = ''"
+                  ></v-text-field>
+
+                  <!-- Error Message -->
+                  <v-alert v-if="error" type="error" variant="tonal" class="mb-4" closable>
+                    {{ error }}
+                  </v-alert>
+
+                  <!-- Success Message -->
+                  <v-alert v-if="success" type="success" variant="tonal" class="mb-4">
+                    <v-icon icon="mdi-check-circle" class="mr-2"></v-icon>
+                    Setup complete! Launching Tradecraft...
+                  </v-alert>
+
+                  <!-- Buttons -->
+                  <v-btn
+                    type="submit"
+                    block
+                    size="x-large"
+                    color="success"
+                    :disabled="!pin || !confirmPin || loading"
+                    :loading="loading"
+                    class="mb-2"
+                  >
+                    Complete Setup
                   </v-btn>
 
                   <v-btn
                     block
-                    size="large"
                     variant="outlined"
-                    @click="showInstructions = true"
+                    @click="step = 1"
+                    :disabled="loading"
                   >
-                    <v-icon icon="mdi-arrow-left" class="mr-2"></v-icon>
-                    Back to instructions
+                    <v-icon icon="mdi-arrow-left" start></v-icon>
+                    Back to API Keys
                   </v-btn>
-
-                  <!-- Security Note -->
-                  <v-card variant="tonal" color="grey-darken-3" class="mt-6">
-                    <v-card-text class="text-center">
-                      <div class="text-body-2 mb-2">
-                        <v-icon icon="mdi-lock-outline" size="small" class="mr-1"></v-icon>
-                        Your API keys are stored locally on your computer
-                      </div>
-                      <div class="text-caption text-medium-emphasis">
-                        Never shared or transmitted anywhere
-                      </div>
-                      <div class="text-caption text-medium-emphasis mono-font mt-1">
-                        ~/.config/trading-bot/.env
-                      </div>
-                    </v-card-text>
-                  </v-card>
-                </v-form>
+                </form>
               </v-card-text>
             </v-card>
           </v-col>
@@ -233,23 +244,33 @@
 
 <script>
 import { ref } from 'vue'
-import { SaveAPIKeys } from '../../wailsjs/go/main/App'
+import { SaveAPIKeys, SetPIN } from '../../wailsjs/go/main/App'
 
 export default {
   name: 'SetupWizard',
   emits: ['setup-complete'],
   setup(props, { emit }) {
+    const step = ref(1)
     const showInstructions = ref(true)
+
+    // Step 1: API Keys
     const apiKey = ref('')
     const apiSecret = ref('')
     const showSecret = ref(false)
+
+    // Step 2: PIN
+    const pin = ref('')
+    const confirmPin = ref('')
+    const showPin = ref(false)
+    const showConfirmPin = ref(false)
+
+    // Common
     const error = ref('')
     const success = ref(false)
     const loading = ref(false)
 
-    const handleSubmit = async () => {
+    const handleAPISubmit = async () => {
       error.value = ''
-      success.value = false
       loading.value = true
 
       try {
@@ -266,11 +287,55 @@ export default {
         }
 
         await SaveAPIKeys(apiKey.value.trim(), apiSecret.value.trim())
+
+        // Move to PIN step
+        step.value = 2
+
+      } catch (err) {
+        error.value = err.toString().replace('Error: ', '')
+      } finally {
+        loading.value = false
+      }
+    }
+
+    const handlePINSubmit = async () => {
+      error.value = ''
+      loading.value = true
+
+      try {
+        // Validate PIN
+        if (!pin.value) {
+          error.value = 'PIN is required'
+          loading.value = false
+          return
+        }
+
+        if (pin.value.length < 4 || pin.value.length > 6) {
+          error.value = 'PIN must be 4-6 digits'
+          loading.value = false
+          return
+        }
+
+        if (!/^\d+$/.test(pin.value)) {
+          error.value = 'PIN must contain only numbers'
+          loading.value = false
+          return
+        }
+
+        if (pin.value !== confirmPin.value) {
+          error.value = 'PINs do not match'
+          loading.value = false
+          return
+        }
+
+        // Save PIN
+        await SetPIN(pin.value)
         success.value = true
 
+        // Complete setup
         setTimeout(() => {
           emit('setup-complete')
-        }, 1000)
+        }, 1500)
 
       } catch (err) {
         error.value = err.toString().replace('Error: ', '')
@@ -280,14 +345,20 @@ export default {
     }
 
     return {
+      step,
       showInstructions,
       apiKey,
       apiSecret,
       showSecret,
+      pin,
+      confirmPin,
+      showPin,
+      showConfirmPin,
       error,
       success,
       loading,
-      handleSubmit
+      handleAPISubmit,
+      handlePINSubmit
     }
   }
 }

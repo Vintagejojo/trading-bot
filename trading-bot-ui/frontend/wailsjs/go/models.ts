@@ -210,6 +210,54 @@ export namespace main {
 		    return a;
 		}
 	}
+	export class CandleData {
+	    timestamp: number;
+	    open: number;
+	    high: number;
+	    low: number;
+	    close: number;
+	    volume: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new CandleData(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.timestamp = source["timestamp"];
+	        this.open = source["open"];
+	        this.high = source["high"];
+	        this.low = source["low"];
+	        this.close = source["close"];
+	        this.volume = source["volume"];
+	    }
+	}
+	export class IndicatorData {
+	    timestamp: number;
+	    rsi: number;
+	    macd: number;
+	    signal: number;
+	    histogram: number;
+	    bb_upper: number;
+	    bb_middle: number;
+	    bb_lower: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new IndicatorData(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.timestamp = source["timestamp"];
+	        this.rsi = source["rsi"];
+	        this.macd = source["macd"];
+	        this.signal = source["signal"];
+	        this.histogram = source["histogram"];
+	        this.bb_upper = source["bb_upper"];
+	        this.bb_middle = source["bb_middle"];
+	        this.bb_lower = source["bb_lower"];
+	    }
+	}
 	export class StrategyInfo {
 	    name: string;
 	    description: string;
@@ -223,6 +271,42 @@ export namespace main {
 	        this.name = source["name"];
 	        this.description = source["description"];
 	    }
+	}
+	export class TimeframeChartData {
+	    timeframe: string;
+	    candles: CandleData[];
+	    indicators: IndicatorData;
+	    is_ready: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new TimeframeChartData(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.timeframe = source["timeframe"];
+	        this.candles = this.convertValues(source["candles"], CandleData);
+	        this.indicators = this.convertValues(source["indicators"], IndicatorData);
+	        this.is_ready = source["is_ready"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	export class WalletBalance {
 	    asset: string;

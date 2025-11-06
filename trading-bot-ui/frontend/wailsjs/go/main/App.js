@@ -30,8 +30,16 @@ export function GetEnvFilePath() {
   return window['go']['main']['App']['GetEnvFilePath']();
 }
 
+export function GetMultiTimeframeData() {
+  return window['go']['main']['App']['GetMultiTimeframeData']();
+}
+
 export function GetSetupInstructions() {
   return window['go']['main']['App']['GetSetupInstructions']();
+}
+
+export function GetTimeframeData(arg1) {
+  return window['go']['main']['App']['GetTimeframeData'](arg1);
 }
 
 export function GetTradeHistory(arg1) {

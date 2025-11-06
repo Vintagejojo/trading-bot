@@ -24,6 +24,23 @@ trading-bot/
 └── trading-bot-ui/       # Wails desktop application (separate module)
 ```
 
+## Architectural Guardrails
+
+- The WebSocket manager (`internal/bot/`) and indicators (`internal/indicators/`) are foundational – do not alter their public interfaces unless necessary.
+- New functionality (like multi-strategy support or portfolio mode) must be implemented *additively* rather than by overwriting base logic.
+- All refactors must maintain compatibility with the existing CLI entrypoint (`cmd/rsi-bot/main.go`).
+
+
+## Claude’s Checklist Before Submitting Code
+
+Before producing code suggestions:
+- ✅ Confirm the file path and package match.
+- ✅ Verify import paths and naming consistency.
+- ✅ Ensure variable and struct field names already exist or will be defined.
+- ✅ Check that any logging or error handling aligns with existing conventions.
+- ✅ Describe any new dependencies or configs that must be added.
+
+
 ### Key Components
 
 **Bot (`internal/bot/bot.go`)**:
@@ -143,8 +160,24 @@ The README.md contains a detailed phased growth plan (PHASE 2-7) for adding feat
 - Phase 5: Web interface
 - Phase 6: Strategy pattern (multiple strategies)
 - Phase 7: Vue.js frontend
+- Phase 8: Portfolio Mode & Feature Gating
+  Introduce a dual-mode system (`client` vs `portfolio`) to control feature visibility and execution:
+  - Add a global config or environment flag to toggle modes.
+  - Gate premium modules (e.g. liquidity safeguards, emergency lockouts) behind feature flags.
+  - Stub or disable sensitive logic in portfolio mode, with visual indicators in the UI.
+  - Ensure backend guards prevent execution of locked features.
+  - Use Git branching or build tags to isolate full-featured client releases from public demos.
 
 **Critical Rule**: Only advance phases when previous phase runs stable for 24+ hours without crashes.
+
+
+## Safety & Stability Rules
+
+- Never modify `.env` files or expose credentials.
+- Never suggest code that executes real trades unless `trading_enabled` is `true` *and* explicitly confirmed by the user.
+- When unsure about Binance API behaviors, Claude should reference the `adshao/go-binance/v2` documentation before guessing.
+- Never remove logging or safeguards unless specifically instructed.
+
 
 ### Safety Considerations
 - Always test with `trading_enabled: false` (paper trading) first
@@ -152,6 +185,24 @@ The README.md contains a detailed phased growth plan (PHASE 2-7) for adding feat
 - RSI signals should be verified against independent sources before trusting
 - Small quantities recommended for initial live testing
 - No stop-loss or take-profit limits currently implemented
+
+## Claude Self-Assessment Prompts
+
+Before finalizing responses, Claude should ask itself:
+- “Did I overcomplicate this fix?”
+- “Could this cause runtime panics or import cycles?”
+- “Does this follow idiomatic Go?”
+- “Would this run safely with `trading_enabled: false`?”
+
+
+## Phase Control Logic
+
+Claude should:
+- Always check which **phase** (2–8) the project is in before suggesting code.
+- Only reference or touch components relevant to the current phase.
+- When moving to a new phase, summarize what has been completed, what is pending, and what dependencies must remain stable.
+- If an earlier phase (e.g. 5–7) has bugs, Claude should prioritize stabilizing them before continuing forward.
+
 
 ### Module Structure
 The project uses a single Go module (`rsi-bot`) at the root. The `trading-bot-ui` directory has its own `go.mod` and is a separate Wails application that will eventually integrate with the trading bot logic.
@@ -175,3 +226,11 @@ The project uses a single Go module (`rsi-bot`) at the root. The `trading-bot-ui
 **UI**:
 - `wailsapp/wails/v2` - Desktop application framework
 - Vue.js frontend (in `trading-bot-ui/frontend`)
+
+## Development Discipline
+
+- Every function edit must keep consistent naming and idiomatic Go style.
+- If Claude suggests a new package or function, it must explain where to place it (e.g., `internal/bot/metrics.go`) and why it belongs there.
+- Do not rename files or move directories unless the change improves clarity or solves a dependency issue.
+- Keep the Go module structure intact (`rsi-bot` root, `trading-bot-ui` separate).
+

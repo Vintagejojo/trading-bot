@@ -52,6 +52,10 @@
               <v-btn icon="mdi-cog" v-bind="props"></v-btn>
             </template>
             <v-list>
+              <SettingsDialog />
+
+              <v-divider></v-divider>
+
               <v-list-item @click="resetAPIKeys">
                 <template v-slot:prepend>
                   <v-icon icon="mdi-refresh"></v-icon>
@@ -83,8 +87,11 @@
               <CurrentPosition :position="botStatus.position" class="mt-4" />
             </v-col>
 
-            <!-- Right Column: Activity & Trades -->
+            <!-- Right Column: Charts & Activity -->
             <v-col cols="12" lg="8">
+              <!-- Trading Chart - only show for multitimeframe strategy -->
+              <TradingChart v-if="botStatus.running && botStatus.strategy === 'multitimeframe'" class="mb-4" />
+
               <ActivityLog class="mb-4" />
 
               <TradeHistory :trades="trades" />
@@ -108,6 +115,8 @@ import CurrentPosition from './components/CurrentPosition.vue'
 import ActivityLog from './components/ActivityLog.vue'
 import TradeHistory from './components/TradeHistory.vue'
 import WalletBalance from './components/WalletBalance.vue'
+import SettingsDialog from './components/SettingsDialog.vue'
+import TradingChart from './components/TradingChart.vue'
 
 export default {
   name: 'App',
@@ -119,7 +128,9 @@ export default {
     CurrentPosition,
     ActivityLog,
     TradeHistory,
-    WalletBalance
+    WalletBalance,
+    SettingsDialog,
+    TradingChart
   },
   setup() {
     const setupComplete = ref(true)
@@ -180,9 +191,13 @@ export default {
     const stopBot = async () => {
       try {
         await StopBot()
+        // Force immediate UI update
+        botStatus.value.running = false
         await loadBotStatus()
       } catch (error) {
         console.error('Failed to stop bot:', error)
+        // Even if there's an error, try to sync state
+        await loadBotStatus()
         alert('Failed to stop bot: ' + error)
       }
     }
@@ -255,6 +270,9 @@ export default {
 
       EventsOn('bot:stopped', () => {
         console.log('Bot stopped event received')
+        // Force immediate UI state update
+        botStatus.value.running = false
+        // Then refresh all data
         refreshData()
       })
 

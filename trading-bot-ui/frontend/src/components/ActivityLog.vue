@@ -92,12 +92,50 @@ export default {
     }
 
     onMounted(() => {
-      EventsOn('bot:connected', (data) => addLog('bot:connected', data.message, data.data))
-      EventsOn('bot:candle', (data) => addLog('bot:candle', data.message, data.data))
-      EventsOn('bot:indicator', (data) => addLog('bot:indicator', data.message, data.data))
-      EventsOn('bot:trade', (data) => addLog('bot:trade', data.message, data.data))
-      EventsOn('bot:status', (data) => addLog('bot:status', data.message, data.data))
-      EventsOn('bot:error', (data) => addLog('bot:error', typeof data === 'string' ? data : data.message, typeof data === 'object' ? data.data : {}))
+      // Handle events - data can be either {message, data} object or a plain string
+      EventsOn('bot:connected', (data) => {
+        const msg = typeof data === 'string' ? data : (data?.message || 'Connected')
+        const eventData = typeof data === 'object' ? data.data : {}
+        addLog('bot:connected', msg, eventData)
+      })
+
+      EventsOn('bot:candle', (data) => {
+        const msg = typeof data === 'string' ? data : (data?.message || 'Candle updated')
+        const eventData = typeof data === 'object' ? data.data : {}
+        addLog('bot:candle', msg, eventData)
+      })
+
+      EventsOn('bot:indicator', (data) => {
+        const msg = typeof data === 'string' ? data : (data?.message || 'Indicator updated')
+        const eventData = typeof data === 'object' ? data.data : {}
+        addLog('bot:indicator', msg, eventData)
+      })
+
+      EventsOn('bot:trade', (data) => {
+        const msg = typeof data === 'string' ? data : (data?.message || 'Trade executed')
+        const eventData = typeof data === 'object' ? data.data : {}
+        addLog('bot:trade', msg, eventData)
+      })
+
+      EventsOn('bot:status', (data) => {
+        const msg = typeof data === 'string' ? data : (data?.message || 'Status update')
+        const eventData = typeof data === 'object' ? data.data : {}
+        addLog('bot:status', msg, eventData)
+      })
+
+      EventsOn('bot:error', (data) => {
+        const msg = typeof data === 'string' ? data : (data?.message || 'Error occurred')
+        const eventData = typeof data === 'object' ? data.data : {}
+        addLog('bot:error', msg, eventData)
+      })
+
+      EventsOn('bot:started', (strategy) => {
+        addLog('bot:connected', `Bot started with ${strategy} strategy`, { strategy })
+      })
+
+      EventsOn('bot:stopped', () => {
+        addLog('bot:status', 'Bot stopped', {})
+      })
     })
 
     return { logs, getLogColor, getLogIcon, formatTime, clearLogs }

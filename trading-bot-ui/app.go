@@ -114,6 +114,10 @@ func (a *App) GetAvailableStrategies() []StrategyInfo {
 			Name:        "bbands",
 			Description: "Bollinger Bands - Volatility-based trading",
 		},
+		{
+			Name:        "multitimeframe",
+			Description: "Multi-Timeframe - Advanced strategy using Daily/1h/5m timeframes with RSI, MACD, and Bollinger Bands",
+		},
 	}
 }
 
@@ -121,6 +125,8 @@ func (a *App) GetAvailableStrategies() []StrategyInfo {
 func (a *App) GetBotStatus() BotStatus {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+
+	log.Printf("[GetBotStatus] botRunning=%v, bot=%v", a.botRunning, a.bot != nil)
 
 	status := BotStatus{
 		Running:     a.botRunning,
@@ -233,20 +239,48 @@ func (a *App) StopBot() error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
+	log.Println("StopBot called")
+
+	// If bot is not running, ensure clean state and return success
+	// This handles the case where bot crashed or was already stopped
 	if !a.botRunning {
-		return fmt.Errorf("bot is not running")
+		log.Println("Bot already stopped, ensuring clean state")
+
+		// Cleanup any lingering resources
+		if a.botCancel != nil {
+			a.botCancel()
+			a.botCancel = nil
+		}
+
+		if a.bot != nil {
+			a.bot.Stop()          // Close WebSocket
+			a.bot.CloseDatabase() // Close database
+			a.bot = nil
+		}
+
+		// Emit stopped event to sync UI
+		runtime.EventsEmit(a.ctx, "bot:stopped", "")
+
+		return nil // Return success instead of error
 	}
 
+	// Cancel the context to signal goroutines to stop
 	if a.botCancel != nil {
+		log.Println("Cancelling bot context...")
 		a.botCancel()
+		a.botCancel = nil
 	}
 
+	// Stop bot and close connections
 	if a.bot != nil {
-		a.bot.CloseDatabase()
+		log.Println("Stopping bot and closing connections...")
+		a.bot.Stop()          // Close WebSocket immediately
+		a.bot.CloseDatabase() // Close database
+		a.bot = nil
 	}
 
 	a.botRunning = false
-	log.Println("Bot stopped")
+	log.Println("✅ Bot stopped successfully")
 	runtime.EventsEmit(a.ctx, "bot:stopped", "")
 
 	return nil
@@ -490,29 +524,35 @@ func (a *App) GetWalletBalance() ([]WalletBalance, error) {
 	// Enable debug mode to see the actual request
 	client.Debug = true
 
-	// Get server time to sync, but use a simpler approach
-	// The TimeOffset field doesn't seem to work reliably, so we'll wait to ensure our time is behind
-	log.Printf("GetWalletBalance: Starting to fetch balance...")
+	// Synchronize with Binance server time to avoid timestamp errors
+	log.Printf("GetWalletBalance: Synchronizing time with Binance server...")
+
+	// Get server time first
 	serverTime, err := client.NewServerTimeService().Do(context.Background())
 	if err != nil {
 		log.Printf("Warning: Failed to get server time: %v", err)
+		// Continue anyway with a default offset
+		client.TimeOffset = -2000 // Default to 2 seconds behind
 	} else {
 		localTime := time.Now().UnixMilli()
 		timeOffset := serverTime - localTime
 		log.Printf("Time sync: Server=%d, Local=%d, Offset=%d ms", serverTime, localTime, timeOffset)
 
-		// If our clock is ahead of server time, wait until we're behind
-		if timeOffset < 0 {
-			// Our clock is ahead by abs(timeOffset) ms, wait a bit longer
-			sleepDuration := time.Duration(-timeOffset+1000) * time.Millisecond
-			log.Printf("Clock is %d ms ahead, waiting %v to get behind server time", -timeOffset, sleepDuration)
-			time.Sleep(sleepDuration)
-			log.Printf("Sleep complete, proceeding with account request")
-		}
+		// The TimeOffset should be: (server_time - local_time)
+		// But we want to be BEHIND server time, so we subtract additional buffer
+		// If our clock is ahead (offset is negative), we need to go back even more
+		// If our clock is behind (offset is positive), we still want to be a bit more behind for safety
+
+		// Set offset to ensure we're always 2 seconds behind server time
+		client.TimeOffset = timeOffset - 2000
+		log.Printf("Setting TimeOffset to %d ms (will make requests appear 2s behind server)", client.TimeOffset)
 	}
 
-	// Now make the account request - our timestamp should be behind server time
-	log.Printf("Calling Binance US GetAccountService...")
+	// Small delay to ensure we're definitely behind server time
+	time.Sleep(100 * time.Millisecond)
+
+	// Now make the account request with synchronized time
+	log.Printf("Calling Binance GetAccountService with TimeOffset=%d...", client.TimeOffset)
 	account, err := client.NewGetAccountService().Do(context.Background())
 	if err != nil {
 		log.Printf("ERROR: GetAccountService failed: %v", err)
@@ -573,4 +613,171 @@ func (a *App) GetWalletBalance() ([]WalletBalance, error) {
 	}
 
 	return balances, nil
+}
+
+// ============= Multi-Timeframe Chart Data Methods =============
+
+// CandleData represents a single candlestick
+type CandleData struct {
+	Timestamp int64   `json:"timestamp"` // Unix milliseconds
+	Open      float64 `json:"open"`
+	High      float64 `json:"high"`
+	Low       float64 `json:"low"`
+	Close     float64 `json:"close"`
+	Volume    float64 `json:"volume"`
+}
+
+// IndicatorData represents indicator values for a timeframe
+type IndicatorData struct {
+	Timestamp int64   `json:"timestamp"`
+	RSI       float64 `json:"rsi"`
+	MACD      float64 `json:"macd"`
+	Signal    float64 `json:"signal"`
+	Histogram float64 `json:"histogram"`
+	BBUpper   float64 `json:"bb_upper"`
+	BBMiddle  float64 `json:"bb_middle"`
+	BBLower   float64 `json:"bb_lower"`
+}
+
+// TimeframeChartData represents chart data for a specific timeframe
+type TimeframeChartData struct {
+	Timeframe  string          `json:"timeframe"`
+	Candles    []CandleData    `json:"candles"`
+	Indicators IndicatorData   `json:"indicators"`
+	IsReady    bool            `json:"is_ready"`
+}
+
+// GetMultiTimeframeData returns chart data for all timeframes
+func (a *App) GetMultiTimeframeData() (map[string]TimeframeChartData, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	if a.bot == nil || !a.botRunning {
+		return nil, fmt.Errorf("bot is not running")
+	}
+
+	// Get multi-timeframe manager from bot
+	mtfManager := a.bot.GetMultiTimeframeManager()
+	if mtfManager == nil {
+		return nil, fmt.Errorf("multi-timeframe manager not available")
+	}
+
+	result := make(map[string]TimeframeChartData)
+
+	// Get data for each timeframe
+	timeframes := []strategy.Timeframe{
+		strategy.Timeframe5m,
+		strategy.Timeframe1h,
+		strategy.Timeframe1d,
+	}
+
+	for _, tf := range timeframes {
+		tfData := mtfManager.TimeframeData[tf]
+		tfIndicators := mtfManager.Indicators[tf]
+
+		if tfData == nil || tfIndicators == nil {
+			continue
+		}
+
+		// Convert candles to CandleData
+		candles := make([]CandleData, 0, len(tfData.Candles))
+		for _, candle := range tfData.Candles {
+			candles = append(candles, CandleData{
+				Timestamp: candle.Timestamp.UnixMilli(),
+				Open:      candle.Open,
+				High:      candle.High,
+				Low:       candle.Low,
+				Close:     candle.Close,
+				Volume:    candle.Volume,
+			})
+		}
+
+		// Get current indicator values
+		snapshot, isReady := mtfManager.GetIndicatorValues(tf)
+
+		indicatorData := IndicatorData{
+			Timestamp: time.Now().UnixMilli(),
+		}
+
+		if isReady {
+			indicatorData.RSI = snapshot.RSI
+			indicatorData.MACD = snapshot.MACD
+			indicatorData.Signal = snapshot.MACDSignal
+			indicatorData.Histogram = snapshot.MACDHistogram
+			indicatorData.BBUpper = snapshot.BBandsUpper
+			indicatorData.BBMiddle = snapshot.BBandsMiddle
+			indicatorData.BBLower = snapshot.BBandsLower
+		}
+
+		result[tf.String()] = TimeframeChartData{
+			Timeframe:  tf.String(),
+			Candles:    candles,
+			Indicators: indicatorData,
+			IsReady:    isReady,
+		}
+	}
+
+	return result, nil
+}
+
+// GetTimeframeData returns chart data for a specific timeframe
+func (a *App) GetTimeframeData(timeframe string) (*TimeframeChartData, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	if a.bot == nil || !a.botRunning {
+		return nil, fmt.Errorf("bot is not running")
+	}
+
+	mtfManager := a.bot.GetMultiTimeframeManager()
+	if mtfManager == nil {
+		return nil, fmt.Errorf("multi-timeframe manager not available")
+	}
+
+	// Convert string to Timeframe
+	tf := strategy.Timeframe(timeframe)
+
+	tfData := mtfManager.TimeframeData[tf]
+	tfIndicators := mtfManager.Indicators[tf]
+
+	if tfData == nil || tfIndicators == nil {
+		return nil, fmt.Errorf("timeframe %s not available", timeframe)
+	}
+
+	// Convert candles
+	candles := make([]CandleData, 0, len(tfData.Candles))
+	for _, candle := range tfData.Candles {
+		candles = append(candles, CandleData{
+			Timestamp: candle.Timestamp.UnixMilli(),
+			Open:      candle.Open,
+			High:      candle.High,
+			Low:       candle.Low,
+			Close:     candle.Close,
+			Volume:    candle.Volume,
+		})
+	}
+
+	// Get indicator values
+	snapshot, isReady := mtfManager.GetIndicatorValues(tf)
+
+	indicatorData := IndicatorData{
+		Timestamp: time.Now().UnixMilli(),
+	}
+
+	if isReady {
+		indicatorData.RSI = snapshot.RSI
+		indicatorData.MACD = snapshot.MACD
+		indicatorData.Signal = snapshot.MACDSignal
+		indicatorData.Histogram = snapshot.MACDHistogram
+		indicatorData.BBUpper = snapshot.BBandsUpper
+		indicatorData.BBMiddle = snapshot.BBandsMiddle
+		indicatorData.BBLower = snapshot.BBandsLower
+	}
+
+	return &TimeframeChartData{
+		Timeframe:  tf.String(),
+		Candles:    candles,
+		Indicators: indicatorData,
+		IsReady:    isReady,
+	}, nil
 }

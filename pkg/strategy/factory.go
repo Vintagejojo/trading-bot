@@ -54,6 +54,18 @@ func (f *Factory) Create(config StrategyConfig) (Strategy, error) {
 	case "bbands", "bollinger_bands":
 		return NewBollingerBandsStrategy(indicator)
 
+	case "multitimeframe", "multi_timeframe":
+		// For multi-timeframe strategy, ignore the indicator parameter
+		// as it creates its own indicators for each timeframe
+		strategyConfig := DefaultMultiTimeframeStrategyConfig()
+		if config.OverboughtLevel != 0 {
+			strategyConfig.RSIOverbought = config.OverboughtLevel
+		}
+		if config.OversoldLevel != 0 {
+			strategyConfig.RSIOversold = config.OversoldLevel
+		}
+		return NewMultiTimeframeStrategy(strategyConfig)
+
 	default:
 		return nil, fmt.Errorf("unknown strategy type: %s", config.Type)
 	}
@@ -85,6 +97,14 @@ func (f *Factory) ValidateConfig(config StrategyConfig) error {
 		// No additional validation needed
 	case "bbands", "bollinger_bands":
 		// No additional validation needed
+	case "multitimeframe", "multi_timeframe":
+		// Multi-timeframe strategy has its own validation
+		if config.OverboughtLevel != 0 && config.OversoldLevel != 0 {
+			if config.OverboughtLevel <= config.OversoldLevel {
+				return fmt.Errorf("overbought level (%.1f) must be greater than oversold level (%.1f)",
+					config.OverboughtLevel, config.OversoldLevel)
+			}
+		}
 	default:
 		return fmt.Errorf("unknown strategy type: %s", config.Type)
 	}
@@ -98,6 +118,7 @@ func (f *Factory) GetAvailableStrategies() []string {
 		"rsi",
 		"macd",
 		"bbands",
+		"multitimeframe",
 	}
 }
 
@@ -142,6 +163,24 @@ func (f *Factory) GetDefaultConfig(strategyType string) StrategyConfig {
 					"std_dev": 2.0,
 				},
 			},
+		}
+
+	case "multitimeframe", "multi_timeframe":
+		return StrategyConfig{
+			Type: "multitimeframe",
+			IndicatorConfig: indicators.IndicatorConfig{
+				Type: "multitimeframe",
+				Params: map[string]interface{}{
+					"rsi_period":    14,
+					"macd_fast":     12,
+					"macd_slow":     26,
+					"macd_signal":   9,
+					"bbands_period": 20,
+					"bbands_stddev": 2.0,
+				},
+			},
+			OverboughtLevel: 70.0,
+			OversoldLevel:   30.0,
 		}
 
 	default:
