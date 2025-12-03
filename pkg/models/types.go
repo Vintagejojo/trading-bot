@@ -54,6 +54,7 @@ type KlineEvent struct {
 		Symbol   string `json:"s"`
 		OpenTime int64  `json:"t"`
 		Close    string `json:"c"`
+		Volume   string `json:"v"`
 		IsClosed bool   `json:"x"`
 	} `json:"k"`
 }

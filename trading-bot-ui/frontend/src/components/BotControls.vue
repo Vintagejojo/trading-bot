@@ -230,7 +230,8 @@ export default {
     const strategies = [
       { title: 'RSI - Mean Reversion', value: 'rsi' },
       { title: 'MACD - Trend Following', value: 'macd' },
-      { title: 'Bollinger Bands - Volatility', value: 'bbands' }
+      { title: 'Bollinger Bands - Volatility', value: 'bbands' },
+      { title: 'Multi-Timeframe - Advanced (Daily/1h/5m)', value: 'multitimeframe' }
     ]
 
     const tradingPairs = [

@@ -385,10 +385,12 @@ func (b *Bot) handleMessage(message []byte) error {
 		return fmt.Errorf("failed to parse close price: %w", err)
 	}
 
-	// Update indicator with new price
-	indicator := b.strategy.GetIndicator()
-	if err := indicator.Update(closePrice, time.Unix(event.Kline.OpenTime/1000, 0)); err != nil {
-		return fmt.Errorf("failed to update indicator: %w", err)
+	volume, _ := strconv.ParseFloat(event.Kline.Volume, 64)
+	timestamp := time.Unix(event.Kline.OpenTime/1000, 0)
+
+	// Update strategy with new price data (this handles both single-indicator and multi-timeframe strategies)
+	if err := b.strategy.Update(closePrice, volume, timestamp); err != nil {
+		return fmt.Errorf("failed to update strategy: %w", err)
 	}
 
 	log.Printf("📊 Candle closed: %s = %.8f", b.config.Symbol, closePrice)
@@ -397,17 +399,25 @@ func (b *Bot) handleMessage(message []byte) error {
 		"price":  closePrice,
 	})
 
-	// Check if indicator has enough data
-	if !indicator.IsReady() {
-		log.Printf("⏳ Waiting for indicator to initialize (current data: %d)", indicator.GetDataCount())
-		b.emit("bot:status", fmt.Sprintf("Waiting for indicator (%d data points)", indicator.GetDataCount()), map[string]interface{}{
-			"dataPoints": indicator.GetDataCount(),
-		})
+	// Check if strategy is ready (uses Strategy.IsReady() which handles multi-timeframe properly)
+	if !b.strategy.IsReady() {
+		// For single indicator strategies, show data count
+		indicator := b.strategy.GetIndicator()
+		if indicator != nil {
+			log.Printf("⏳ Waiting for indicator to initialize (current data: %d)", indicator.GetDataCount())
+			b.emit("bot:status", fmt.Sprintf("Waiting for indicator (%d data points)", indicator.GetDataCount()), map[string]interface{}{
+				"dataPoints": indicator.GetDataCount(),
+			})
+		} else {
+			// Multi-timeframe strategy - show generic message
+			log.Printf("⏳ Waiting for multi-timeframe indicators to initialize")
+			b.emit("bot:status", "Waiting for multi-timeframe indicators to initialize", map[string]interface{}{})
+		}
 		return nil
 	}
 
-	// Get indicator values
-	values, isValid := indicator.GetValue()
+	// Get indicator values (for multi-timeframe, this returns aggregated values)
+	values, isValid := b.strategy.GetIndicator().GetValue()
 	if !isValid {
 		log.Printf("⚠️ Indicator not ready yet")
 		return nil

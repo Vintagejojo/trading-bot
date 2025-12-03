@@ -43,8 +43,7 @@
 </template>
 
 <script>
-import { ref, onMounted } from 'vue'
-import { EventsOn } from '../../wailsjs/runtime/runtime'
+import { ref, onMounted, onUnmounted } from 'vue'
 
 export default {
   name: 'ActivityLog',
@@ -92,50 +91,39 @@ export default {
     }
 
     onMounted(() => {
-      // Handle events - data can be either {message, data} object or a plain string
-      EventsOn('bot:connected', (data) => {
-        const msg = typeof data === 'string' ? data : (data?.message || 'Connected')
-        const eventData = typeof data === 'object' ? data.data : {}
-        addLog('bot:connected', msg, eventData)
-      })
+      console.log('[ActivityLog] Component mounted, using custom event bridge')
 
-      EventsOn('bot:candle', (data) => {
-        const msg = typeof data === 'string' ? data : (data?.message || 'Candle updated')
+      // Listen to custom events forwarded from App.vue
+      const handleActivityLog = (event) => {
+        const { type, data } = event.detail
+        const msg = typeof data === 'string' ? data : (data?.message || 'Update')
         const eventData = typeof data === 'object' ? data.data : {}
-        addLog('bot:candle', msg, eventData)
-      })
+        addLog(type, msg, eventData)
+      }
 
-      EventsOn('bot:indicator', (data) => {
-        const msg = typeof data === 'string' ? data : (data?.message || 'Indicator updated')
-        const eventData = typeof data === 'object' ? data.data : {}
-        addLog('bot:indicator', msg, eventData)
-      })
+      window.addEventListener('activity-log', handleActivityLog)
 
-      EventsOn('bot:trade', (data) => {
-        const msg = typeof data === 'string' ? data : (data?.message || 'Trade executed')
-        const eventData = typeof data === 'object' ? data.data : {}
-        addLog('bot:trade', msg, eventData)
-      })
-
-      EventsOn('bot:status', (data) => {
-        const msg = typeof data === 'string' ? data : (data?.message || 'Status update')
-        const eventData = typeof data === 'object' ? data.data : {}
-        addLog('bot:status', msg, eventData)
-      })
-
-      EventsOn('bot:error', (data) => {
-        const msg = typeof data === 'string' ? data : (data?.message || 'Error occurred')
-        const eventData = typeof data === 'object' ? data.data : {}
-        addLog('bot:error', msg, eventData)
-      })
-
-      EventsOn('bot:started', (strategy) => {
+      // Also listen to bot:started and bot:stopped directly
+      const handleBotStarted = (event) => {
+        const strategy = event.detail || 'unknown'
         addLog('bot:connected', `Bot started with ${strategy} strategy`, { strategy })
+      }
+
+      const handleBotStopped = () => {
+        addLog('bot:status', 'Bot stopped', {})
+      }
+
+      window.addEventListener('bot-started', handleBotStarted)
+      window.addEventListener('bot-stopped', handleBotStopped)
+
+      // Cleanup
+      onUnmounted(() => {
+        window.removeEventListener('activity-log', handleActivityLog)
+        window.removeEventListener('bot-started', handleBotStarted)
+        window.removeEventListener('bot-stopped', handleBotStopped)
       })
 
-      EventsOn('bot:stopped', () => {
-        addLog('bot:status', 'Bot stopped', {})
-      })
+      console.log('[ActivityLog] Event bridge initialized')
     })
 
     return { logs, getLogColor, getLogIcon, formatTime, clearLogs }

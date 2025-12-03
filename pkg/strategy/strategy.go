@@ -1,6 +1,8 @@
 package strategy
 
 import (
+	"time"
+
 	"rsi-bot/pkg/indicators"
 	"rsi-bot/pkg/models"
 )
@@ -39,6 +41,12 @@ type Strategy interface {
 
 	// GetIndicator returns the indicator used by this strategy
 	GetIndicator() indicators.Indicator
+
+	// Update processes new price data (updates all indicators)
+	Update(price float64, volume float64, timestamp time.Time) error
+
+	// IsReady returns true when the strategy has enough data to generate signals
+	IsReady() bool
 
 	// GenerateSignal analyzes indicator data and returns a trading signal
 	GenerateSignal(ctx SignalContext) Signal

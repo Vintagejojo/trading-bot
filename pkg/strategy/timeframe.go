@@ -2,6 +2,7 @@ package strategy
 
 import (
 	"fmt"
+	"log"
 	"time"
 )
 
@@ -83,6 +84,7 @@ func (td *TimeframeData) Update(price float64, volume float64, timestamp time.Ti
 		// Save the previous completed bar if it exists
 		if td.currentBar != nil {
 			td.Candles = append(td.Candles, *td.currentBar)
+			log.Printf("[%s] Bar completed! Total candles: %d", td.Timeframe, len(td.Candles))
 
 			// Keep only the last MaxCandles
 			if len(td.Candles) > td.MaxCandles {
@@ -100,6 +102,7 @@ func (td *TimeframeData) Update(price float64, volume float64, timestamp time.Ti
 			Volume:    volume,
 		}
 		td.barStartTime = barStart
+		log.Printf("[%s] New bar started at %s, price=%.2f", td.Timeframe, barStart.Format("15:04:05"), price)
 	} else {
 		// Update the current bar
 		if price > td.currentBar.High {

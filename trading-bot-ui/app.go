@@ -29,15 +29,15 @@ func min(a, b int) int {
 
 // App struct
 type App struct {
-	ctx       context.Context
-	bot       *bot.Bot
-	config    *models.Config
-	botCtx    context.Context
-	botCancel context.CancelFunc
+	ctx        context.Context
+	bot        *bot.Bot
+	config     *models.Config
+	botCtx     context.Context
+	botCancel  context.CancelFunc
 	botRunning bool
-	mu        sync.Mutex
-	auth      *AuthManager
-	setup     *SetupManager
+	mu         sync.Mutex
+	auth       *AuthManager
+	setup      *SetupManager
 }
 
 // StrategyInfo represents strategy metadata for the frontend
@@ -48,12 +48,12 @@ type StrategyInfo struct {
 
 // BotStatus represents current bot state
 type BotStatus struct {
-	Running      bool                   `json:"running"`
-	Strategy     string                 `json:"strategy"`
-	Symbol       string                 `json:"symbol"`
-	TradingMode  string                 `json:"trading_mode"` // "paper" or "live"
-	Position     *database.Position     `json:"position"`
-	LastTrade    *database.Trade        `json:"last_trade"`
+	Running     bool               `json:"running"`
+	Strategy    string             `json:"strategy"`
+	Symbol      string             `json:"symbol"`
+	TradingMode string             `json:"trading_mode"` // "paper" or "live"
+	Position    *database.Position `json:"position"`
+	LastTrade   *database.Trade    `json:"last_trade"`
 }
 
 // NewApp creates a new App application struct
@@ -126,7 +126,7 @@ func (a *App) GetBotStatus() BotStatus {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	log.Printf("[GetBotStatus] botRunning=%v, bot=%v", a.botRunning, a.bot != nil)
+	// log.Printf("[GetBotStatus] botRunning=%v, bot=%v", a.botRunning, a.bot != nil)
 
 	status := BotStatus{
 		Running:     a.botRunning,
@@ -212,6 +212,7 @@ func (a *App) StartBot(strategyType, symbol string, quantity float64, paperTradi
 
 	// Set up event callback for the bot
 	a.bot.SetEventCallback(func(eventType string, message string, data map[string]interface{}) {
+		log.Printf("[EVENT EMIT] Type: %s, Message: %s", eventType, message)
 		runtime.EventsEmit(a.ctx, eventType, map[string]interface{}{
 			"message": message,
 			"data":    data,
@@ -488,10 +489,10 @@ func (a *App) ResetSetup() error {
 
 // WalletBalance represents a single asset balance
 type WalletBalance struct {
-	Asset     string  `json:"asset"`
-	Free      string  `json:"free"`
-	Locked    string  `json:"locked"`
-	USDValue  float64 `json:"usd_value"`  // USD value of this asset
+	Asset    string  `json:"asset"`
+	Free     string  `json:"free"`
+	Locked   string  `json:"locked"`
+	USDValue float64 `json:"usd_value"` // USD value of this asset
 }
 
 // GetWalletBalance returns user's Binance wallet balances
@@ -524,35 +525,29 @@ func (a *App) GetWalletBalance() ([]WalletBalance, error) {
 	// Enable debug mode to see the actual request
 	client.Debug = true
 
-	// Synchronize with Binance server time to avoid timestamp errors
-	log.Printf("GetWalletBalance: Synchronizing time with Binance server...")
-
-	// Get server time first
+	// Get server time to sync, but use a simpler approach
+	// The TimeOffset field doesn't seem to work reliably, so we'll wait to ensure our time is behind
+	log.Printf("GetWalletBalance: Starting to fetch balance...")
 	serverTime, err := client.NewServerTimeService().Do(context.Background())
 	if err != nil {
 		log.Printf("Warning: Failed to get server time: %v", err)
-		// Continue anyway with a default offset
-		client.TimeOffset = -2000 // Default to 2 seconds behind
 	} else {
 		localTime := time.Now().UnixMilli()
 		timeOffset := serverTime - localTime
 		log.Printf("Time sync: Server=%d, Local=%d, Offset=%d ms", serverTime, localTime, timeOffset)
 
-		// The TimeOffset should be: (server_time - local_time)
-		// But we want to be BEHIND server time, so we subtract additional buffer
-		// If our clock is ahead (offset is negative), we need to go back even more
-		// If our clock is behind (offset is positive), we still want to be a bit more behind for safety
-
-		// Set offset to ensure we're always 2 seconds behind server time
-		client.TimeOffset = timeOffset - 2000
-		log.Printf("Setting TimeOffset to %d ms (will make requests appear 2s behind server)", client.TimeOffset)
+		// If our clock is ahead of server time, wait until we're behind
+		if timeOffset < 0 {
+			// Our clock is ahead by abs(timeOffset) ms, wait a bit longer
+			sleepDuration := time.Duration(-timeOffset+1000) * time.Millisecond
+			log.Printf("Clock is %d ms ahead, waiting %v to get behind server time", -timeOffset, sleepDuration)
+			time.Sleep(sleepDuration)
+			log.Printf("Sleep complete, proceeding with account request")
+		}
 	}
 
-	// Small delay to ensure we're definitely behind server time
-	time.Sleep(100 * time.Millisecond)
-
-	// Now make the account request with synchronized time
-	log.Printf("Calling Binance GetAccountService with TimeOffset=%d...", client.TimeOffset)
+	// Now make the account request - our timestamp should be behind server time
+	log.Printf("Calling Binance GetAccountService...")
 	account, err := client.NewGetAccountService().Do(context.Background())
 	if err != nil {
 		log.Printf("ERROR: GetAccountService failed: %v", err)
@@ -641,10 +636,10 @@ type IndicatorData struct {
 
 // TimeframeChartData represents chart data for a specific timeframe
 type TimeframeChartData struct {
-	Timeframe  string          `json:"timeframe"`
-	Candles    []CandleData    `json:"candles"`
-	Indicators IndicatorData   `json:"indicators"`
-	IsReady    bool            `json:"is_ready"`
+	Timeframe  string        `json:"timeframe"`
+	Candles    []CandleData  `json:"candles"`
+	Indicators IndicatorData `json:"indicators"`
+	IsReady    bool          `json:"is_ready"`
 }
 
 // GetMultiTimeframeData returns chart data for all timeframes

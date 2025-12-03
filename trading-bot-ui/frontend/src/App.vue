@@ -263,13 +263,15 @@ export default {
 
       refreshInterval = setInterval(refreshData, 5000)
 
-      EventsOn('bot:started', () => {
-        console.log('Bot started event received')
+      EventsOn('bot:started', (strategy) => {
+        console.log('Bot started event received:', strategy)
+        window.dispatchEvent(new CustomEvent('bot-started', { detail: strategy }))
         refreshData()
       })
 
       EventsOn('bot:stopped', () => {
         console.log('Bot stopped event received')
+        window.dispatchEvent(new CustomEvent('bot-stopped'))
         // Force immediate UI state update
         botStatus.value.running = false
         // Then refresh all data
@@ -279,6 +281,27 @@ export default {
       EventsOn('bot:error', (error) => {
         console.error('Bot error:', error)
         alert('Bot error: ' + error)
+      })
+
+      // Forward all bot events to ActivityLog via event bus
+      EventsOn('bot:connected', (data) => {
+        window.dispatchEvent(new CustomEvent('activity-log', { detail: { type: 'bot:connected', data } }))
+      })
+
+      EventsOn('bot:candle', (data) => {
+        window.dispatchEvent(new CustomEvent('activity-log', { detail: { type: 'bot:candle', data } }))
+      })
+
+      EventsOn('bot:indicator', (data) => {
+        window.dispatchEvent(new CustomEvent('activity-log', { detail: { type: 'bot:indicator', data } }))
+      })
+
+      EventsOn('bot:trade', (data) => {
+        window.dispatchEvent(new CustomEvent('activity-log', { detail: { type: 'bot:trade', data } }))
+      })
+
+      EventsOn('bot:status', (data) => {
+        window.dispatchEvent(new CustomEvent('activity-log', { detail: { type: 'bot:status', data } }))
       })
     })
 

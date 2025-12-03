@@ -2,6 +2,8 @@ package strategy
 
 import (
 	"fmt"
+	"time"
+
 	"rsi-bot/pkg/indicators"
 )
 
@@ -39,6 +41,16 @@ func (s *BollingerBandsStrategy) Name() string {
 // GetIndicator returns the underlying indicator
 func (s *BollingerBandsStrategy) GetIndicator() indicators.Indicator {
 	return s.indicator
+}
+
+// Update processes new price data
+func (s *BollingerBandsStrategy) Update(price float64, volume float64, timestamp time.Time) error {
+	return s.indicator.Update(price, timestamp)
+}
+
+// IsReady returns true when the strategy has enough data
+func (s *BollingerBandsStrategy) IsReady() bool {
+	return s.indicator.IsReady()
 }
 
 // GenerateSignal analyzes Bollinger Bands and generates trading signals

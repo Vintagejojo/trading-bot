@@ -2,6 +2,7 @@ package strategy
 
 import (
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
@@ -96,7 +97,15 @@ func (mts *MultiTimeframeStrategy) GetIndicator() indicators.Indicator {
 
 // Update processes new price data across all timeframes
 func (mts *MultiTimeframeStrategy) Update(price float64, volume float64, timestamp time.Time) error {
-	return mts.mtfManager.Update(price, volume, timestamp)
+	err := mts.mtfManager.Update(price, volume, timestamp)
+	if err != nil {
+		return err
+	}
+	// Debug: Check if data is being accumulated
+	for tf, tfData := range mts.mtfManager.TimeframeData {
+		log.Printf("[MTF Update] %s: %d candles", tf, len(tfData.Candles))
+	}
+	return nil
 }
 
 // GenerateSignal analyzes all timeframes and generates a trading signal

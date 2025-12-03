@@ -31,7 +31,19 @@ func NewFactory() *Factory {
 func (f *Factory) Create(config StrategyConfig) (Strategy, error) {
 	strategyType := strings.ToLower(config.Type)
 
-	// Create the indicator first
+	// Handle multitimeframe strategy separately (it doesn't use a single indicator)
+	if strategyType == "multitimeframe" || strategyType == "multi_timeframe" {
+		strategyConfig := DefaultMultiTimeframeStrategyConfig()
+		if config.OverboughtLevel != 0 {
+			strategyConfig.RSIOverbought = config.OverboughtLevel
+		}
+		if config.OversoldLevel != 0 {
+			strategyConfig.RSIOversold = config.OversoldLevel
+		}
+		return NewMultiTimeframeStrategy(strategyConfig)
+	}
+
+	// Create the indicator for other strategies
 	indicator, err := f.indicatorFactory.Create(config.IndicatorConfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create indicator: %w", err)
@@ -54,18 +66,6 @@ func (f *Factory) Create(config StrategyConfig) (Strategy, error) {
 	case "bbands", "bollinger_bands":
 		return NewBollingerBandsStrategy(indicator)
 
-	case "multitimeframe", "multi_timeframe":
-		// For multi-timeframe strategy, ignore the indicator parameter
-		// as it creates its own indicators for each timeframe
-		strategyConfig := DefaultMultiTimeframeStrategyConfig()
-		if config.OverboughtLevel != 0 {
-			strategyConfig.RSIOverbought = config.OverboughtLevel
-		}
-		if config.OversoldLevel != 0 {
-			strategyConfig.RSIOversold = config.OversoldLevel
-		}
-		return NewMultiTimeframeStrategy(strategyConfig)
-
 	default:
 		return nil, fmt.Errorf("unknown strategy type: %s", config.Type)
 	}
@@ -77,12 +77,15 @@ func (f *Factory) ValidateConfig(config StrategyConfig) error {
 		return fmt.Errorf("strategy type cannot be empty")
 	}
 
-	// Validate indicator config
-	if err := f.indicatorFactory.ValidateConfig(config.IndicatorConfig); err != nil {
-		return fmt.Errorf("invalid indicator config: %w", err)
-	}
-
 	strategyType := strings.ToLower(config.Type)
+
+	// Skip indicator validation for multitimeframe strategy (it creates its own indicators)
+	if strategyType != "multitimeframe" && strategyType != "multi_timeframe" {
+		// Validate indicator config for non-multitimeframe strategies
+		if err := f.indicatorFactory.ValidateConfig(config.IndicatorConfig); err != nil {
+			return fmt.Errorf("invalid indicator config: %w", err)
+		}
+	}
 
 	// Validate strategy-specific parameters
 	switch strategyType {

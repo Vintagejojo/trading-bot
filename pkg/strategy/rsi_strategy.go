@@ -2,6 +2,8 @@ package strategy
 
 import (
 	"fmt"
+	"time"
+
 	"rsi-bot/pkg/indicators"
 )
 
@@ -39,6 +41,16 @@ func (s *RSIStrategy) Name() string {
 // GetIndicator returns the underlying indicator
 func (s *RSIStrategy) GetIndicator() indicators.Indicator {
 	return s.indicator
+}
+
+// Update processes new price data
+func (s *RSIStrategy) Update(price float64, volume float64, timestamp time.Time) error {
+	return s.indicator.Update(price, timestamp)
+}
+
+// IsReady returns true when the strategy has enough data
+func (s *RSIStrategy) IsReady() bool {
+	return s.indicator.IsReady()
 }
 
 // GenerateSignal analyzes RSI and generates trading signals
