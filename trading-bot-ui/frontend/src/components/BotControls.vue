@@ -208,6 +208,37 @@
         >
           Stop Bot
         </v-btn>
+
+        <!-- Demo Data Controls (for screenshots/testing) -->
+        <v-divider class="my-4"></v-divider>
+
+        <v-card variant="tonal" color="info" class="mt-4">
+          <v-card-subtitle>Demo/Testing</v-card-subtitle>
+          <v-card-text>
+            <v-btn
+              block
+              size="small"
+              color="info"
+              prepend-icon="mdi-database-plus"
+              @click="generateDemo"
+              class="mb-2"
+            >
+              Generate Demo Trades
+            </v-btn>
+            <v-btn
+              block
+              size="small"
+              variant="outlined"
+              prepend-icon="mdi-delete"
+              @click="clearDemo"
+            >
+              Clear Demo Data
+            </v-btn>
+            <div class="text-caption text-grey mt-2">
+              For screenshots and UI testing
+            </div>
+          </v-card-text>
+        </v-card>
       </div>
     </v-card-text>
   </v-card>
@@ -215,7 +246,7 @@
 
 <script>
 import { ref } from 'vue'
-import { GetDefaultStrategyParams } from '../../wailsjs/go/main/App'
+import { GetDefaultStrategyParams, GenerateDemoTrades, ClearDemoTrades } from '../../wailsjs/go/main/App'
 
 export default {
   name: 'BotControls',
@@ -225,7 +256,7 @@ export default {
       required: true
     }
   },
-  emits: ['start-bot', 'stop-bot'],
+  emits: ['start-bot', 'stop-bot', 'refresh-data'],
   setup(props, { emit }) {
     const strategies = [
       { title: 'RSI - Mean Reversion', value: 'rsi' },
@@ -287,6 +318,38 @@ export default {
       }
     }
 
+    const generateDemo = async () => {
+      try {
+        await GenerateDemoTrades()
+        // Trigger immediate refresh of all data
+        emit('refresh-data')
+        // Small delay to ensure DB commits, then show success
+        setTimeout(() => {
+          alert('✅ Demo trades generated! Check Performance and Current Position sections.')
+        }, 100)
+      } catch (error) {
+        console.error('Failed to generate demo trades:', error)
+        alert('Failed to generate demo trades: ' + error)
+      }
+    }
+
+    const clearDemo = async () => {
+      if (!confirm('Clear all demo/paper trades?')) {
+        return
+      }
+      try {
+        await ClearDemoTrades()
+        // Trigger immediate refresh
+        emit('refresh-data')
+        setTimeout(() => {
+          alert('✅ Demo trades cleared!')
+        }, 100)
+      } catch (error) {
+        console.error('Failed to clear demo trades:', error)
+        alert('Failed to clear demo trades: ' + error)
+      }
+    }
+
     loadStrategyParams()
 
     return {
@@ -295,7 +358,9 @@ export default {
       config,
       loadStrategyParams,
       handleStart,
-      handleStop
+      handleStop,
+      generateDemo,
+      clearDemo
     }
   }
 }

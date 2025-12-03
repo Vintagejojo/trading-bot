@@ -6,6 +6,14 @@ export function ChangePIN(arg1, arg2) {
   return window['go']['main']['App']['ChangePIN'](arg1, arg2);
 }
 
+export function ClearDemoTrades() {
+  return window['go']['main']['App']['ClearDemoTrades']();
+}
+
+export function GenerateDemoTrades() {
+  return window['go']['main']['App']['GenerateDemoTrades']();
+}
+
 export function GetAPIKeyMasked() {
   return window['go']['main']['App']['GetAPIKeyMasked']();
 }

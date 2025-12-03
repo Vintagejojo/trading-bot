@@ -365,7 +365,7 @@ func (db *DB) GetTradeSummary() (*TradeSummary, error) {
 	`
 
 	var summary TradeSummary
-	var startDate, endDate sql.NullTime
+	var startDateStr, endDateStr sql.NullString
 
 	err := db.conn.QueryRow(query).Scan(
 		&summary.TotalTrades,
@@ -375,19 +375,24 @@ func (db *DB) GetTradeSummary() (*TradeSummary, error) {
 		&summary.AverageProfitLoss,
 		&summary.LargestWin,
 		&summary.LargestLoss,
-		&startDate,
-		&endDate,
+		&startDateStr,
+		&endDateStr,
 	)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to calculate summary: %w", err)
 	}
 
-	if startDate.Valid {
-		summary.StartDate = startDate.Time
+	// Parse string timestamps to time.Time
+	if startDateStr.Valid {
+		if t, err := time.Parse(time.RFC3339, startDateStr.String); err == nil {
+			summary.StartDate = t
+		}
 	}
-	if endDate.Valid {
-		summary.EndDate = endDate.Time
+	if endDateStr.Valid {
+		if t, err := time.Parse(time.RFC3339, endDateStr.String); err == nil {
+			summary.EndDate = t
+		}
 	}
 
 	// Calculate win rate
@@ -433,4 +438,31 @@ func DeserializeIndicatorValues(jsonStr string) map[string]float64 {
 		return make(map[string]float64)
 	}
 	return values
+}
+
+// ClearPaperTrades deletes all paper trades and their associated positions
+func (db *DB) ClearPaperTrades() error {
+	tx, err := db.conn.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	// Delete positions associated with paper trades
+	_, err = tx.Exec(`
+		DELETE FROM positions
+		WHERE buy_trade_id IN (SELECT id FROM trades WHERE paper_trade = 1)
+		OR sell_trade_id IN (SELECT id FROM trades WHERE paper_trade = 1)
+	`)
+	if err != nil {
+		return fmt.Errorf("failed to delete paper positions: %w", err)
+	}
+
+	// Delete paper trades
+	_, err = tx.Exec("DELETE FROM trades WHERE paper_trade = 1")
+	if err != nil {
+		return fmt.Errorf("failed to delete paper trades: %w", err)
+	}
+
+	return tx.Commit()
 }

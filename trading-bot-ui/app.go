@@ -318,9 +318,17 @@ func (a *App) GetTradesByDateRange(startStr, endStr string) ([]database.Trade, e
 func (a *App) GetTradeSummary() (*database.TradeSummary, error) {
 	if a.bot == nil {
 		// Return empty summary if no bot
+		log.Println("⚠️ GetTradeSummary: Bot is nil, returning empty summary")
 		return &database.TradeSummary{}, nil
 	}
-	return a.bot.GetTradeSummary()
+	summary, err := a.bot.GetTradeSummary()
+	if err != nil {
+		log.Printf("❌ GetTradeSummary error: %v", err)
+		return nil, err
+	}
+	log.Printf("📊 GetTradeSummary: TotalTrades=%d, TotalBuys=%d, TotalSells=%d, P/L=$%.2f",
+		summary.TotalTrades, summary.TotalBuys, summary.TotalSells, summary.TotalProfitLoss)
+	return summary, nil
 }
 
 // GetCurrentPosition returns the current open position
@@ -608,6 +616,176 @@ func (a *App) GetWalletBalance() ([]WalletBalance, error) {
 	}
 
 	return balances, nil
+}
+
+// ============= Demo/Testing Methods =============
+
+// GenerateDemoTrades creates sample trading data for testing and demo purposes
+func (a *App) GenerateDemoTrades() error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	if a.bot == nil {
+		return fmt.Errorf("bot must be running to generate demo trades")
+	}
+
+	log.Println("Generating demo trades for testing/screenshots...")
+
+	symbol := a.config.Symbol
+	if symbol == "" {
+		symbol = "BTCUSDT"
+	}
+
+	strategy := "rsi"
+	if a.config.Strategy.Type != "" {
+		strategy = a.config.Strategy.Type
+	}
+
+	now := time.Now()
+
+	// Create 3 completed trade pairs (BUY/SELL) with realistic data
+	demoPairs := []struct {
+		buyPrice   float64
+		sellPrice  float64
+		quantity   float64
+		hoursAgo   int
+		durationHr int
+	}{
+		{buyPrice: 91234.50, sellPrice: 91890.25, quantity: 0.001, hoursAgo: 48, durationHr: 6},  // +$0.66 profit
+		{buyPrice: 90500.00, sellPrice: 89750.30, quantity: 0.0015, hoursAgo: 36, durationHr: 4}, // -$1.12 loss
+		{buyPrice: 92100.75, sellPrice: 93250.50, quantity: 0.002, hoursAgo: 24, durationHr: 8},  // +$2.30 profit
+	}
+
+	for i, pair := range demoPairs {
+		buyTime := now.Add(-time.Duration(pair.hoursAgo) * time.Hour)
+		sellTime := buyTime.Add(time.Duration(pair.durationHr) * time.Hour)
+
+		// Insert BUY trade
+		buyTrade := &database.Trade{
+			Symbol:       symbol,
+			Side:         "BUY",
+			Quantity:     pair.quantity,
+			Price:        pair.buyPrice,
+			Total:        pair.quantity * pair.buyPrice,
+			Strategy:     strategy,
+			SignalReason: "Demo: RSI oversold",
+			PaperTrade:   true,
+			Timestamp:    buyTime,
+		}
+
+		buyTradeID, err := a.bot.GetDB().InsertTrade(buyTrade)
+		if err != nil {
+			return fmt.Errorf("failed to insert demo buy trade %d: %w", i+1, err)
+		}
+
+		// Insert SELL trade
+		profitLoss := (pair.sellPrice - pair.buyPrice) * pair.quantity
+		profitPercent := ((pair.sellPrice - pair.buyPrice) / pair.buyPrice) * 100
+
+		sellTrade := &database.Trade{
+			Symbol:            symbol,
+			Side:              "SELL",
+			Quantity:          pair.quantity,
+			Price:             pair.sellPrice,
+			Total:             pair.quantity * pair.sellPrice,
+			Strategy:          strategy,
+			SignalReason:      "Demo: RSI overbought",
+			PaperTrade:        true,
+			Timestamp:         sellTime,
+			ProfitLoss:        profitLoss,
+			ProfitLossPercent: profitPercent,
+		}
+
+		sellTradeID, err := a.bot.GetDB().InsertTrade(sellTrade)
+		if err != nil {
+			return fmt.Errorf("failed to insert demo sell trade %d: %w", i+1, err)
+		}
+
+		// Create closed position record
+		position := &database.Position{
+			Symbol:            symbol,
+			Quantity:          pair.quantity,
+			EntryPrice:        pair.buyPrice,
+			EntryTime:         buyTime,
+			ExitPrice:         pair.sellPrice,
+			ExitTime:          &sellTime,
+			Strategy:          strategy,
+			IsOpen:            false,
+			BuyTradeID:        buyTradeID,
+			SellTradeID:       sellTradeID,
+			ProfitLoss:        profitLoss,
+			ProfitLossPercent: profitPercent,
+		}
+
+		_, err = a.bot.GetDB().InsertPosition(position)
+		if err != nil {
+			return fmt.Errorf("failed to insert demo position %d: %w", i+1, err)
+		}
+
+		log.Printf("Demo trade pair %d created: BUY @ %.2f → SELL @ %.2f = $%.2f P/L",
+			i+1, pair.buyPrice, pair.sellPrice, profitLoss)
+	}
+
+	// Create 1 open position for "Current Position" display
+	openBuyPrice := 91525.97
+	openQuantity := 0.0025
+	openBuyTime := now.Add(-2 * time.Hour)
+
+	openBuyTrade := &database.Trade{
+		Symbol:       symbol,
+		Side:         "BUY",
+		Quantity:     openQuantity,
+		Price:        openBuyPrice,
+		Total:        openQuantity * openBuyPrice,
+		Strategy:     strategy,
+		SignalReason: "Demo: Current open position",
+		PaperTrade:   true,
+		Timestamp:    openBuyTime,
+	}
+
+	openTradeID, err := a.bot.GetDB().InsertTrade(openBuyTrade)
+	if err != nil {
+		return fmt.Errorf("failed to insert demo open buy trade: %w", err)
+	}
+
+	openPosition := &database.Position{
+		Symbol:     symbol,
+		Quantity:   openQuantity,
+		EntryPrice: openBuyPrice,
+		EntryTime:  openBuyTime,
+		Strategy:   strategy,
+		IsOpen:     true,
+		BuyTradeID: openTradeID,
+	}
+
+	_, err = a.bot.GetDB().InsertPosition(openPosition)
+	if err != nil {
+		return fmt.Errorf("failed to insert demo open position: %w", err)
+	}
+
+	log.Printf("✅ Demo data generated: 3 closed trades + 1 open position")
+	log.Println("📊 Refresh your UI to see Performance stats and Current Position!")
+
+	return nil
+}
+
+// ClearDemoTrades removes all demo/paper trades from the database
+func (a *App) ClearDemoTrades() error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	if a.bot == nil {
+		return fmt.Errorf("bot must be running to clear demo trades")
+	}
+
+	// Delete all paper trades and their positions
+	err := a.bot.GetDB().ClearPaperTrades()
+	if err != nil {
+		return fmt.Errorf("failed to clear demo trades: %w", err)
+	}
+
+	log.Println("✅ Demo trades cleared")
+	return nil
 }
 
 // ============= Multi-Timeframe Chart Data Methods =============

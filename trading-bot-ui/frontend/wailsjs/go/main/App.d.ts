@@ -5,6 +5,10 @@ import {database} from '../models';
 
 export function ChangePIN(arg1:string,arg2:string):Promise<void>;
 
+export function ClearDemoTrades():Promise<void>;
+
+export function GenerateDemoTrades():Promise<void>;
+
 export function GetAPIKeyMasked():Promise<string>;
 
 export function GetAvailableStrategies():Promise<Array<main.StrategyInfo>>;

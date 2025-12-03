@@ -80,6 +80,7 @@
                 :botStatus="botStatus"
                 @start-bot="startBot"
                 @stop-bot="stopBot"
+                @refresh-data="refreshData"
               />
 
               <PerformanceStats :stats="stats" class="mt-4" />
@@ -167,6 +168,7 @@ export default {
     const loadStats = async () => {
       try {
         stats.value = await GetTradeSummary()
+        console.log('📊 Stats loaded:', stats.value)
       } catch (error) {
         console.error('Failed to load stats:', error)
       }

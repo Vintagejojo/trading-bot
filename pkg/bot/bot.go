@@ -748,6 +748,11 @@ func (b *Bot) GetOpenPosition() (*database.Position, error) {
 	return b.db.GetOpenPosition(b.config.Symbol)
 }
 
+// GetDB returns the database instance for direct access (used by demo data generation)
+func (b *Bot) GetDB() *database.DB {
+	return b.db
+}
+
 // Stop gracefully stops the bot by closing WebSocket connection
 func (b *Bot) Stop() error {
 	b.connMu.Lock()
