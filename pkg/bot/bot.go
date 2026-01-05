@@ -82,6 +82,19 @@ func New(config *models.Config) *Bot {
 	client := binance.NewClient(config.APIKey, config.APISecret)
 	client.BaseURL = "https://testnet.binance.vision"
 
+	// Synchronize time with Binance server to prevent timestamp errors (-1021)
+	serverTime, timeErr := client.NewServerTimeService().Do(context.Background())
+	if timeErr != nil {
+		log.Printf("⚠️  Warning: Failed to sync time with Binance server: %v", timeErr)
+		log.Println("   Continuing without time sync - may encounter timestamp errors")
+	} else {
+		localTime := time.Now().UnixMilli()
+		timeOffset := serverTime - localTime
+		// Set offset with 1 second safety buffer to ensure we're always behind server time
+		client.TimeOffset = timeOffset - 1000
+		log.Printf("⏰ Time synchronized with Binance: offset=%dms (with 1s buffer)", client.TimeOffset)
+	}
+
 	// Create strategy based on config
 	var strat strategy.Strategy
 	var err error
@@ -409,26 +422,36 @@ func (b *Bot) handleMessage(message []byte) error {
 				"dataPoints": indicator.GetDataCount(),
 			})
 		} else {
-			// Multi-timeframe strategy - show generic message
-			log.Printf("⏳ Waiting for multi-timeframe indicators to initialize")
-			b.emit("bot:status", "Waiting for multi-timeframe indicators to initialize", map[string]interface{}{})
+			// Multi-timeframe or non-indicator strategy (like DCA)
+			log.Printf("⏳ Waiting for strategy to initialize")
+			b.emit("bot:status", "Waiting for strategy to initialize", map[string]interface{}{})
 		}
 		return nil
 	}
 
-	// Get indicator values (for multi-timeframe, this returns aggregated values)
-	values, isValid := b.strategy.GetIndicator().GetValue()
-	if !isValid {
-		log.Printf("⚠️ Indicator not ready yet")
-		return nil
-	}
+	// Get indicator values (if strategy uses indicators)
+	var values map[string]float64
+	indicator := b.strategy.GetIndicator()
+	if indicator != nil {
+		// Strategy uses indicators (RSI, MACD, Multi-timeframe)
+		var isValid bool
+		values, isValid = indicator.GetValue()
+		if !isValid {
+			log.Printf("⚠️ Indicator not ready yet")
+			return nil
+		}
 
-	// Log indicator values
-	log.Printf("📈 %s: %v", b.strategy.Name(), values)
-	b.emit("bot:indicator", fmt.Sprintf("%s: %v", b.strategy.Name(), values), map[string]interface{}{
-		"strategy": b.strategy.Name(),
-		"values":   values,
-	})
+		// Log indicator values
+		log.Printf("📈 %s: %v", b.strategy.Name(), values)
+		b.emit("bot:indicator", fmt.Sprintf("%s: %v", b.strategy.Name(), values), map[string]interface{}{
+			"strategy": b.strategy.Name(),
+			"values":   values,
+		})
+	} else {
+		// Strategy doesn't use indicators (DCA)
+		values = make(map[string]float64)
+		log.Printf("📈 %s strategy (no indicators)", b.strategy.Name())
+	}
 
 	// Generate trading signal using strategy
 	b.processSignal(values, closePrice)
@@ -628,6 +651,7 @@ func (b *Bot) executeBuyOrder(price float64) (string, error) {
 	// Execute with safety wrapper
 	var orderID string
 	executeOrder := func() error {
+		// Note: TimeOffset set on client during initialization handles timestamp sync
 		order, err := b.client.NewCreateOrderService().
 			Symbol(b.config.Symbol).
 			Side(binance.SideTypeBuy).
@@ -679,6 +703,7 @@ func (b *Bot) executeSellOrder(price float64) (string, error) {
 	// Execute with safety wrapper
 	var orderID string
 	executeOrder := func() error {
+		// Note: TimeOffset set on client during initialization handles timestamp sync
 		order, err := b.client.NewCreateOrderService().
 			Symbol(b.config.Symbol).
 			Side(binance.SideTypeSell).
@@ -751,6 +776,11 @@ func (b *Bot) GetOpenPosition() (*database.Position, error) {
 // GetDB returns the database instance for direct access (used by demo data generation)
 func (b *Bot) GetDB() *database.DB {
 	return b.db
+}
+
+// GetClient returns the Binance client for API calls
+func (b *Bot) GetClient() *binance.Client {
+	return b.client
 }
 
 // Stop gracefully stops the bot by closing WebSocket connection

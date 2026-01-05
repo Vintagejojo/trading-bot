@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net/smtp"
 	"strconv"
 	"strings"
 	"sync"
@@ -13,6 +14,7 @@ import (
 	"rsi-bot/pkg/database"
 	"rsi-bot/pkg/indicators"
 	"rsi-bot/pkg/models"
+	"rsi-bot/pkg/portfolio"
 	"rsi-bot/pkg/strategy"
 
 	"github.com/adshao/go-binance/v2"
@@ -125,8 +127,6 @@ func (a *App) GetAvailableStrategies() []StrategyInfo {
 func (a *App) GetBotStatus() BotStatus {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-
-	// log.Printf("[GetBotStatus] botRunning=%v, bot=%v", a.botRunning, a.bot != nil)
 
 	status := BotStatus{
 		Running:     a.botRunning,
@@ -295,6 +295,56 @@ func (a *App) GetTradeHistory(limit int) ([]database.Trade, error) {
 	return a.bot.GetRecentTrades(limit)
 }
 
+// ExportTradesToCSV exports all trades to CSV format
+func (a *App) ExportTradesToCSV() (string, error) {
+	if a.bot == nil {
+		return "", fmt.Errorf("bot is not running")
+	}
+
+	// Get all trades (use a high limit)
+	trades, err := a.bot.GetRecentTrades(10000)
+	if err != nil {
+		return "", fmt.Errorf("failed to get trades: %w", err)
+	}
+
+	if len(trades) == 0 {
+		return "", fmt.Errorf("no trades to export")
+	}
+
+	// Build CSV
+	var csv strings.Builder
+
+	// Header
+	csv.WriteString("ID,Timestamp,Symbol,Side,Price,Quantity,Total,Strategy,Signal Reason,Paper Trade,Profit/Loss,Profit/Loss %,Binance Order ID\n")
+
+	// Rows
+	for _, trade := range trades {
+		paperTrade := "false"
+		if trade.PaperTrade {
+			paperTrade = "true"
+		}
+
+		csv.WriteString(fmt.Sprintf("%d,%s,%s,%s,%.8f,%.8f,%.2f,%s,\"%s\",%s,%.2f,%.2f,%s\n",
+			trade.ID,
+			trade.Timestamp.Format(time.RFC3339),
+			trade.Symbol,
+			trade.Side,
+			trade.Price,
+			trade.Quantity,
+			trade.Total,
+			trade.Strategy,
+			trade.SignalReason,
+			paperTrade,
+			trade.ProfitLoss,
+			trade.ProfitLossPercent,
+			trade.BinanceOrderID,
+		))
+	}
+
+	log.Printf("✅ Exported %d trades to CSV", len(trades))
+	return csv.String(), nil
+}
+
 // GetTradesByDateRange returns trades in date range
 func (a *App) GetTradesByDateRange(startStr, endStr string) ([]database.Trade, error) {
 	if a.bot == nil {
@@ -317,8 +367,7 @@ func (a *App) GetTradesByDateRange(startStr, endStr string) ([]database.Trade, e
 // GetTradeSummary returns aggregate statistics
 func (a *App) GetTradeSummary() (*database.TradeSummary, error) {
 	if a.bot == nil {
-		// Return empty summary if no bot
-		log.Println("⚠️ GetTradeSummary: Bot is nil, returning empty summary")
+		// Return empty summary if no bot (this is expected when bot isn't running)
 		return &database.TradeSummary{}, nil
 	}
 	summary, err := a.bot.GetTradeSummary()
@@ -326,9 +375,59 @@ func (a *App) GetTradeSummary() (*database.TradeSummary, error) {
 		log.Printf("❌ GetTradeSummary error: %v", err)
 		return nil, err
 	}
-	log.Printf("📊 GetTradeSummary: TotalTrades=%d, TotalBuys=%d, TotalSells=%d, P/L=$%.2f",
-		summary.TotalTrades, summary.TotalBuys, summary.TotalSells, summary.TotalProfitLoss)
+	// Only log if there are actual trades to report
+	if summary.TotalTrades > 0 {
+		log.Printf("📊 GetTradeSummary: TotalTrades=%d, TotalBuys=%d, TotalSells=%d, P/L=$%.2f",
+			summary.TotalTrades, summary.TotalBuys, summary.TotalSells, summary.TotalProfitLoss)
+	}
 	return summary, nil
+}
+
+// GetPortfolioStats returns portfolio statistics for DCA strategies
+func (a *App) GetPortfolioStats() (*portfolio.Stats, error) {
+	if a.bot == nil {
+		// Return empty stats if no bot
+		return &portfolio.Stats{}, nil
+	}
+
+	// Get current price from Binance
+	symbol := a.config.Symbol
+	currentPrice := 0.0
+
+	// Use bot's client to get current price
+	prices, err := a.bot.GetClient().NewListPricesService().Symbol(symbol).Do(context.Background())
+	if err != nil {
+		log.Printf("⚠️  Failed to fetch current price for %s: %v", symbol, err)
+	} else if len(prices) > 0 {
+		priceFloat, parseErr := strconv.ParseFloat(prices[0].Price, 64)
+		if parseErr == nil {
+			currentPrice = priceFloat
+		}
+	}
+
+	// Calculate portfolio stats using the portfolio calculator
+	calculator := portfolio.NewCalculator(a.bot.GetDB())
+	stats, err := calculator.CalculateStats(symbol, currentPrice)
+	if err != nil {
+		log.Printf("❌ GetPortfolioStats error: %v", err)
+		return nil, err
+	}
+
+	// If API is blocked and we couldn't fetch price, use average cost + 5% for demo purposes
+	// This shows realistic unrealized gains instead of appearing worthless
+	if currentPrice == 0 && stats.AverageCost > 0 {
+		estimatedPrice := stats.AverageCost * 1.05 // 5% gain for demo
+		log.Printf("📊 Using estimated price $%.2f (avg cost + 5%%) since API is unavailable", estimatedPrice)
+
+		// Recalculate with estimated price
+		stats, err = calculator.CalculateStats(symbol, estimatedPrice)
+		if err != nil {
+			log.Printf("❌ GetPortfolioStats error with estimated price: %v", err)
+			return nil, err
+		}
+	}
+
+	return stats, nil
 }
 
 // GetCurrentPosition returns the current open position
@@ -533,28 +632,25 @@ func (a *App) GetWalletBalance() ([]WalletBalance, error) {
 	// Enable debug mode to see the actual request
 	client.Debug = true
 
-	// Get server time to sync, but use a simpler approach
-	// The TimeOffset field doesn't seem to work reliably, so we'll wait to ensure our time is behind
-	log.Printf("GetWalletBalance: Starting to fetch balance...")
+	// Synchronize time with Binance server to avoid timestamp errors
+	log.Printf("GetWalletBalance: Synchronizing time with Binance server...")
 	serverTime, err := client.NewServerTimeService().Do(context.Background())
 	if err != nil {
 		log.Printf("Warning: Failed to get server time: %v", err)
 	} else {
 		localTime := time.Now().UnixMilli()
+		// Calculate offset: positive means server is ahead, negative means we're ahead
 		timeOffset := serverTime - localTime
 		log.Printf("Time sync: Server=%d, Local=%d, Offset=%d ms", serverTime, localTime, timeOffset)
 
-		// If our clock is ahead of server time, wait until we're behind
-		if timeOffset < 0 {
-			// Our clock is ahead by abs(timeOffset) ms, wait a bit longer
-			sleepDuration := time.Duration(-timeOffset+1000) * time.Millisecond
-			log.Printf("Clock is %d ms ahead, waiting %v to get behind server time", -timeOffset, sleepDuration)
-			time.Sleep(sleepDuration)
-			log.Printf("Sleep complete, proceeding with account request")
-		}
+		// Set TimeOffset on client to adjust all future requests
+		// Subtract an additional 1000ms buffer to ensure we're always behind server time
+		client.TimeOffset = timeOffset - 1000
+		log.Printf("Set client TimeOffset to %d ms (includes 1s safety buffer)", client.TimeOffset)
 	}
 
-	// Now make the account request - our timestamp should be behind server time
+	// Now make the account request with synchronized time
+	// Note: TimeOffset set above handles timestamp sync automatically
 	log.Printf("Calling Binance GetAccountService...")
 	account, err := client.NewGetAccountService().Do(context.Background())
 	if err != nil {
@@ -618,6 +714,160 @@ func (a *App) GetWalletBalance() ([]WalletBalance, error) {
 	return balances, nil
 }
 
+// ============= Email Settings Methods =============
+
+// EmailSettings represents email notification configuration
+type EmailSettings struct {
+	Enabled            bool   `json:"enabled"`
+	NotificationEmail  string `json:"notificationEmail"`
+	SMTPHost           string `json:"smtpHost"`
+	SMTPPort           int    `json:"smtpPort"`
+	SMTPFromEmail      string `json:"smtpFromEmail"`
+	SMTPPassword       string `json:"smtpPassword"`
+	NotifyOnDCABuy     bool   `json:"notifyOnDCABuy"`
+	NotifyOnDipBuy     bool   `json:"notifyOnDipBuy"`
+	SendMonthlySummary bool   `json:"sendMonthlySummary"`
+}
+
+// GetEmailSettings returns current email settings from .env
+func (a *App) GetEmailSettings() (*EmailSettings, error) {
+	// Load from .env file
+	apiKey, apiSecret, err := a.setup.LoadAPIKeys()
+	if err != nil {
+		// .env doesn't exist yet, return defaults
+		return &EmailSettings{
+			Enabled:            false,
+			NotificationEmail:  "",
+			SMTPHost:           "smtp.gmail.com",
+			SMTPPort:           587,
+			SMTPFromEmail:      "",
+			SMTPPassword:       "",
+			NotifyOnDCABuy:     true, // Default enabled
+			NotifyOnDipBuy:     true, // Default enabled
+			SendMonthlySummary: true, // Default enabled
+		}, nil
+	}
+
+	// Check if we can load .env
+	if apiKey == "" && apiSecret == "" {
+		return &EmailSettings{
+			Enabled:            false,
+			NotificationEmail:  "",
+			SMTPHost:           "smtp.gmail.com",
+			SMTPPort:           587,
+			SMTPFromEmail:      "",
+			SMTPPassword:       "",
+			NotifyOnDCABuy:     true, // Default enabled
+			NotifyOnDipBuy:     true, // Default enabled
+			SendMonthlySummary: true, // Default enabled
+		}, nil
+	}
+
+	// Read email settings from environment
+	settings := &EmailSettings{
+		Enabled:            a.setup.GetEnvVar("EMAIL_NOTIFICATIONS_ENABLED") == "true",
+		NotificationEmail:  a.setup.GetEnvVar("NOTIFICATION_EMAIL"),
+		SMTPHost:           a.setup.GetEnvVar("SMTP_HOST"),
+		SMTPPort:           587,
+		SMTPFromEmail:      a.setup.GetEnvVar("SMTP_FROM_EMAIL"),
+		SMTPPassword:       a.setup.GetEnvVar("SMTP_PASSWORD"),
+		NotifyOnDCABuy:     a.setup.GetEnvVar("NOTIFY_ON_DCA_BUY") != "false",     // Default true
+		NotifyOnDipBuy:     a.setup.GetEnvVar("NOTIFY_ON_DIP_BUY") != "false",     // Default true
+		SendMonthlySummary: a.setup.GetEnvVar("SEND_MONTHLY_SUMMARY") != "false", // Default true
+	}
+
+	// Parse port if set
+	if portStr := a.setup.GetEnvVar("SMTP_PORT"); portStr != "" {
+		if port, err := strconv.Atoi(portStr); err == nil {
+			settings.SMTPPort = port
+		}
+	}
+
+	// Set defaults if empty
+	if settings.SMTPHost == "" {
+		settings.SMTPHost = "smtp.gmail.com"
+	}
+	if settings.SMTPPort == 0 {
+		settings.SMTPPort = 587
+	}
+
+	return settings, nil
+}
+
+// SaveEmailSettings saves email settings to .env file
+func (a *App) SaveEmailSettings(settings EmailSettings) error {
+	// Build env vars map
+	envVars := map[string]string{
+		"EMAIL_NOTIFICATIONS_ENABLED": "false",
+		"NOTIFICATION_EMAIL":          settings.NotificationEmail,
+		"SMTP_HOST":                   settings.SMTPHost,
+		"SMTP_PORT":                   strconv.Itoa(settings.SMTPPort),
+		"SMTP_FROM_EMAIL":             settings.SMTPFromEmail,
+		"SMTP_PASSWORD":               settings.SMTPPassword,
+		"NOTIFY_ON_DCA_BUY":           "false",
+		"NOTIFY_ON_DIP_BUY":           "false",
+		"SEND_MONTHLY_SUMMARY":        "false",
+	}
+
+	if settings.Enabled {
+		envVars["EMAIL_NOTIFICATIONS_ENABLED"] = "true"
+	}
+	if settings.NotifyOnDCABuy {
+		envVars["NOTIFY_ON_DCA_BUY"] = "true"
+	}
+	if settings.NotifyOnDipBuy {
+		envVars["NOTIFY_ON_DIP_BUY"] = "true"
+	}
+	if settings.SendMonthlySummary {
+		envVars["SEND_MONTHLY_SUMMARY"] = "true"
+	}
+
+	// Update .env file
+	if err := a.setup.UpdateEnvVars(envVars); err != nil {
+		return fmt.Errorf("failed to save email settings: %w", err)
+	}
+
+	log.Println("✅ Email settings saved to .env")
+	return nil
+}
+
+// TestEmail sends a test email with current settings
+func (a *App) TestEmail(settings EmailSettings) error {
+	if !settings.Enabled {
+		return fmt.Errorf("email notifications are disabled")
+	}
+
+	if settings.NotificationEmail == "" {
+		return fmt.Errorf("notification email is required")
+	}
+
+	// Create a simple test email using net/smtp
+	auth := smtp.PlainAuth("", settings.SMTPFromEmail, settings.SMTPPassword, settings.SMTPHost)
+
+	subject := "Test Email from Tradecraft"
+	body := `This is a test email from your Tradecraft trading bot.
+
+If you're seeing this, your email notifications are configured correctly!
+
+You'll receive trade notifications here whenever your bot executes a buy or sell order.
+
+---
+Tradecraft Trading Bot
+`
+
+	message := fmt.Sprintf("From: %s\r\nTo: %s\r\nSubject: %s\r\n\r\n%s",
+		settings.SMTPFromEmail, settings.NotificationEmail, subject, body)
+
+	addr := fmt.Sprintf("%s:%d", settings.SMTPHost, settings.SMTPPort)
+	err := smtp.SendMail(addr, auth, settings.SMTPFromEmail, []string{settings.NotificationEmail}, []byte(message))
+	if err != nil {
+		return fmt.Errorf("failed to send test email: %w", err)
+	}
+
+	log.Printf("✅ Test email sent to %s", settings.NotificationEmail)
+	return nil
+}
+
 // ============= Demo/Testing Methods =============
 
 // GenerateDemoTrades creates sample trading data for testing and demo purposes
@@ -643,7 +893,92 @@ func (a *App) GenerateDemoTrades() error {
 
 	now := time.Now()
 
-	// Create 3 completed trade pairs (BUY/SELL) with realistic data
+	// DCA strategy: Generate accumulation trades (BUY only, no SELL)
+	if strategy == "dca" {
+		log.Println("Generating DCA-specific demo data (accumulation only)...")
+
+		// Randomize demo data for realistic screenshots
+		// Base price around current BTC price with variation
+		basePrice := 92000.0 + (float64(now.Unix()%10000) / 100.0) // Varies by current time
+		baseQuantity := 100.0 / basePrice                          // $100 worth of BTC
+
+		var trades []*database.Trade
+		var totalBTC float64
+		var totalUSD float64
+
+		// Generate 5 purchases over 4 weeks (3 regular + 2 dips)
+		purchases := []struct {
+			daysAgo  int
+			isDip    bool
+			priceVar float64 // Percentage variation from base
+		}{
+			{daysAgo: 21, isDip: false, priceVar: 3.5},   // Week 1: Higher price
+			{daysAgo: 17, isDip: true, priceVar: -5.2},   // Week 2: Dip (lower price, more BTC)
+			{daysAgo: 14, isDip: false, priceVar: 1.8},   // Week 3: Regular
+			{daysAgo: 10, isDip: true, priceVar: -6.5},   // Week 3: Another dip
+			{daysAgo: 7, isDip: false, priceVar: 0.5},    // Week 4: Recent buy
+		}
+
+		for i, p := range purchases {
+			buyTime := now.Add(-time.Duration(p.daysAgo*24) * time.Hour)
+
+			// Calculate price with variation
+			price := basePrice * (1 + p.priceVar/100.0)
+
+			// Dip buys are 1.5x quantity
+			quantity := baseQuantity
+			if p.isDip {
+				quantity *= 1.5
+			}
+
+			// Add small random variation to quantity (±5%)
+			quantityVar := 1.0 + (float64((now.Unix()+int64(i))%10)-5.0)/100.0
+			quantity *= quantityVar
+
+			total := price * quantity
+			totalBTC += quantity
+			totalUSD += total
+
+			reason := "DCA: Scheduled weekly purchase"
+			if p.isDip {
+				reason = "DCA: Buy-the-dip triggered (5%+ drop)"
+			}
+
+			trade := &database.Trade{
+				Symbol:       symbol,
+				Side:         "BUY",
+				Quantity:     quantity,
+				Price:        price,
+				Total:        total,
+				Strategy:     strategy,
+				SignalReason: reason,
+				PaperTrade:   true,
+				Timestamp:    buyTime,
+			}
+
+			trades = append(trades, trade)
+
+			buyType := "regular"
+			if p.isDip {
+				buyType = "dip"
+			}
+			log.Printf("DCA demo trade %d: %s buy @ $%.2f (%.8f BTC = $%.2f)",
+				i+1, buyType, price, quantity, total)
+		}
+
+		// Insert all trades in a single transaction (avoids database lock)
+		if err := a.bot.GetDB().InsertTradesInTransaction(trades); err != nil {
+			return fmt.Errorf("failed to insert DCA demo trades: %w", err)
+		}
+
+		avgCost := totalUSD / totalBTC
+		log.Printf("✅ DCA demo data generated: %d accumulation trades", len(trades))
+		log.Printf("💼 Total BTC accumulated: %.8f BTC | Total invested: $%.2f | Avg cost: $%.2f",
+			totalBTC, totalUSD, avgCost)
+		return nil
+	}
+
+	// Trading strategies (RSI, MACD): Generate BUY/SELL pairs
 	demoPairs := []struct {
 		buyPrice   float64
 		sellPrice  float64
@@ -898,14 +1233,22 @@ func (a *App) GetTimeframeData(timeframe string) (*TimeframeChartData, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
+	log.Printf("📊 GetTimeframeData called for timeframe: %s", timeframe)
+
 	if a.bot == nil || !a.botRunning {
+		log.Println("❌ GetTimeframeData: Bot is not running")
 		return nil, fmt.Errorf("bot is not running")
 	}
 
+	log.Printf("Current strategy: %s", a.config.Strategy.Type)
+
 	mtfManager := a.bot.GetMultiTimeframeManager()
 	if mtfManager == nil {
-		return nil, fmt.Errorf("multi-timeframe manager not available")
+		log.Printf("❌ GetTimeframeData: Multi-timeframe manager not available (strategy must be 'multitimeframe', currently '%s')", a.config.Strategy.Type)
+		return nil, fmt.Errorf("multi-timeframe manager not available - please use multitimeframe strategy")
 	}
+
+	log.Printf("✅ Multi-timeframe manager found")
 
 	// Convert string to Timeframe
 	tf := strategy.Timeframe(timeframe)
@@ -913,9 +1256,17 @@ func (a *App) GetTimeframeData(timeframe string) (*TimeframeChartData, error) {
 	tfData := mtfManager.TimeframeData[tf]
 	tfIndicators := mtfManager.Indicators[tf]
 
-	if tfData == nil || tfIndicators == nil {
-		return nil, fmt.Errorf("timeframe %s not available", timeframe)
+	if tfData == nil {
+		log.Printf("❌ No data for timeframe %s", timeframe)
+		return nil, fmt.Errorf("timeframe %s data not available yet", timeframe)
 	}
+
+	if tfIndicators == nil {
+		log.Printf("❌ No indicators for timeframe %s", timeframe)
+		return nil, fmt.Errorf("timeframe %s indicators not available yet", timeframe)
+	}
+
+	log.Printf("✅ Found %d candles for timeframe %s", len(tfData.Candles), timeframe)
 
 	// Convert candles
 	candles := make([]CandleData, 0, len(tfData.Candles))

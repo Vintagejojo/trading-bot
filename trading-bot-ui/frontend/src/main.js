@@ -13,19 +13,29 @@ const vuetify = createVuetify({
   components,
   directives,
   theme: {
-    defaultTheme: 'dark',
+    defaultTheme: 'neonDark',
     themes: {
-      dark: {
+      neonDark: {
+        dark: true,
         colors: {
-          primary: '#2196F3',
-          secondary: '#424242',
-          accent: '#FF4081',
-          error: '#FF5252',
-          info: '#2196F3',
-          success: '#4CAF50',
-          warning: '#FB8C00',
-          background: '#121212',
-          surface: '#1E1E1E',
+          // Base colors (muted neutrals)
+          background: '#1A1A1A',    // Off-black for main background
+          surface: '#2C2C2C',       // Charcoal for cards/panels
+
+          // Neon accents (limited use for maximum impact)
+          primary: '#9D00FF',       // Neon Purple (buttons, highlights)
+          secondary: '#00FFFF',     // Neon Cyan (info, neutral elements)
+          accent: '#9D00FF',        // Neon Purple (emphasis)
+
+          // Status colors (neon variants)
+          success: '#39FF14',       // Neon Green (profits, positive)
+          error: '#FF073A',         // Neon Red/Pink (losses, negative)
+          warning: '#FFFF33',       // Neon Yellow (alerts, caution)
+          info: '#00FFFF',          // Neon Cyan (information)
+
+          // Additional semantic colors
+          'profit': '#39FF14',      // Explicit profit color
+          'loss': '#FF073A',        // Explicit loss color
         },
       },
     },

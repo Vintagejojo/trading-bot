@@ -698,6 +698,27 @@ safety:
    - Efficient lookback window management
    - Memory-conscious data retention policies
 
+4. **Historical Klines Backfill** ⚠️ **PENDING IMPLEMENTATION**
+   - **Current Limitation**: Multi-timeframe charts only collect real-time data from WebSocket
+     - 5m charts: Requires ~10 minutes of waiting
+     - 1h charts: Requires ~2 hours of waiting
+     - 1d charts: Requires ~24+ hours of waiting
+   - **Planned Solution**: Fetch historical klines from Binance REST API on bot startup
+     - Call `GET /api/v3/klines` endpoint for each timeframe
+     - Backfill 200-500 historical candles per timeframe
+     - Pre-populate multi-timeframe manager before WebSocket streaming
+     - Charts display immediately with historical context
+   - **Benefits**:
+     - Instant chart visualization on startup
+     - Indicators can calculate immediately (sufficient data points)
+     - Better user experience - no waiting period
+     - More accurate initial signals (historical context)
+   - **Implementation Priority**: Phase 8.1 enhancement
+   - **Related Files**:
+     - `pkg/strategy/multitimeframe_manager.go` - Add `FetchHistoricalKlines()` method
+     - `pkg/bot/bot.go` - Call backfill before starting WebSocket
+     - API endpoint: Binance `GET /api/v3/klines`
+
 #### 🔄 Signal Layering & Confirmation
 1. **Cross-Timeframe Signal Logic**
    - **Higher Timeframe Trend Filter**: Only trade in direction of higher timeframe trend
@@ -886,6 +907,9 @@ backtesting:
 
 **Implementation Priorities**:
 1. **Phase 8.1**: Basic multi-timeframe data management (1m, 5m, 15m, 1h)
+   - ⚠️ **Sub-task**: Implement historical klines backfill from Binance API
+   - Fetches 200-500 historical candles per timeframe on startup
+   - Enables instant chart visualization without waiting period
 2. **Phase 8.2**: Simple cross-timeframe confirmation (higher TF trend filter)
 3. **Phase 8.3**: Full signal layering with configurable weights
 4. **Phase 8.4**: Backtesting integration and performance analysis

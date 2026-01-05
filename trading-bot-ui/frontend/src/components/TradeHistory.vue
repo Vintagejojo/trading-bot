@@ -5,9 +5,18 @@
         <v-icon icon="mdi-history" class="mr-2" color="info"></v-icon>
         Trade History
       </div>
-      <v-chip v-if="trades.length > 0" size="small" variant="outlined">
-        {{ trades.length }} trades
-      </v-chip>
+      <div class="d-flex align-center gap-2">
+        <v-chip v-if="trades.length > 0" size="small" variant="outlined">
+          {{ displayedTrades.length }} of {{ trades.length }} trades
+        </v-chip>
+        <v-btn
+          v-if="trades.length > maxDisplay"
+          icon="mdi-open-in-new"
+          variant="text"
+          size="small"
+          @click="$emit('view-all')"
+        ></v-btn>
+      </div>
     </v-card-title>
 
     <v-card-text>
@@ -30,7 +39,7 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="trade in trades" :key="trade.id">
+          <tr v-for="trade in displayedTrades" :key="trade.id">
             <td class="text-caption">{{ formatTime(trade.timestamp) }}</td>
             <td>
               <v-chip
@@ -70,15 +79,30 @@
         </tbody>
       </v-table>
 
-      <v-divider v-if="trades.length > 0" class="my-4"></v-divider>
+      <!-- Total P/L - Only show for trading strategies with SELL trades -->
+      <v-divider v-if="trades.length > 0 && hasSellTrades" class="my-4"></v-divider>
 
-      <div v-if="trades.length > 0" class="d-flex justify-space-between align-center">
+      <div v-if="trades.length > 0 && hasSellTrades" class="d-flex justify-space-between align-center">
         <span class="text-caption text-grey">Total P/L:</span>
         <v-chip
           :color="totalProfitLoss >= 0 ? 'success' : 'error'"
           variant="flat"
+          class="neon-hover-primary"
         >
-          {{ totalProfitLoss >= 0 ? '+' : '' }}${{ totalProfitLoss.toFixed(2) }}
+          <span
+            class="crypto-mono"
+            :class="totalProfitLoss >= 0 ? 'neon-glow-success' : 'neon-glow-error'"
+          >
+            {{ totalProfitLoss >= 0 ? '+' : '' }}${{ totalProfitLoss.toFixed(2) }}
+          </span>
+        </v-chip>
+      </div>
+
+      <!-- DCA Info - Show for accumulation-only strategies -->
+      <div v-if="trades.length > 0 && !hasSellTrades" class="text-center py-2">
+        <v-chip variant="outlined" color="info" size="small">
+          <v-icon icon="mdi-trending-up" size="small" class="mr-1"></v-icon>
+          DCA Accumulation Strategy - See Performance box for unrealized gains
         </v-chip>
       </div>
     </v-card-text>
@@ -96,7 +120,14 @@ export default {
       required: true
     }
   },
+  emits: ['view-all'],
   setup(props) {
+    const maxDisplay = 50
+
+    // Only show last 50 trades in main panel
+    const displayedTrades = computed(() => {
+      return props.trades.slice(0, maxDisplay)
+    })
     const formatTime = (timestamp) => {
       const date = new Date(timestamp)
       return date.toLocaleString('en-US', {
@@ -108,9 +139,15 @@ export default {
     }
 
     const formatNumber = (num) => {
+      // Format large numbers with K/M suffix
       if (num >= 1000000) return (num / 1000000).toFixed(2) + 'M'
       if (num >= 1000) return (num / 1000).toFixed(2) + 'K'
-      return num.toFixed(2)
+
+      // Format crypto quantities (small decimals) with appropriate precision
+      if (num < 0.01) return num.toFixed(8)  // BTC amounts: 0.00105143
+      if (num < 1) return num.toFixed(6)     // Small amounts: 0.123456
+
+      return num.toFixed(2)  // Regular amounts: 123.45
     }
 
     const totalProfitLoss = computed(() => {
@@ -119,7 +156,19 @@ export default {
         .reduce((sum, t) => sum + (t.profit_loss || 0), 0)
     })
 
-    return { formatTime, formatNumber, totalProfitLoss }
+    // Check if there are any SELL trades (for showing Total P/L)
+    const hasSellTrades = computed(() => {
+      return props.trades.some(t => t.side === 'SELL')
+    })
+
+    return {
+      formatTime,
+      formatNumber,
+      totalProfitLoss,
+      hasSellTrades,
+      displayedTrades,
+      maxDisplay
+    }
   }
 }
 </script>

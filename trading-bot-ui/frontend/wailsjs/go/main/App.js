@@ -10,6 +10,10 @@ export function ClearDemoTrades() {
   return window['go']['main']['App']['ClearDemoTrades']();
 }
 
+export function ExportTradesToCSV() {
+  return window['go']['main']['App']['ExportTradesToCSV']();
+}
+
 export function GenerateDemoTrades() {
   return window['go']['main']['App']['GenerateDemoTrades']();
 }
@@ -34,12 +38,20 @@ export function GetDefaultStrategyParams(arg1) {
   return window['go']['main']['App']['GetDefaultStrategyParams'](arg1);
 }
 
+export function GetEmailSettings() {
+  return window['go']['main']['App']['GetEmailSettings']();
+}
+
 export function GetEnvFilePath() {
   return window['go']['main']['App']['GetEnvFilePath']();
 }
 
 export function GetMultiTimeframeData() {
   return window['go']['main']['App']['GetMultiTimeframeData']();
+}
+
+export function GetPortfolioStats() {
+  return window['go']['main']['App']['GetPortfolioStats']();
 }
 
 export function GetSetupInstructions() {
@@ -94,6 +106,10 @@ export function SaveAPIKeys(arg1, arg2) {
   return window['go']['main']['App']['SaveAPIKeys'](arg1, arg2);
 }
 
+export function SaveEmailSettings(arg1) {
+  return window['go']['main']['App']['SaveEmailSettings'](arg1);
+}
+
 export function SetPIN(arg1) {
   return window['go']['main']['App']['SetPIN'](arg1);
 }
@@ -104,6 +120,10 @@ export function StartBot(arg1, arg2, arg3, arg4, arg5) {
 
 export function StopBot() {
   return window['go']['main']['App']['StopBot']();
+}
+
+export function TestEmail(arg1) {
+  return window['go']['main']['App']['TestEmail'](arg1);
 }
 
 export function UnlockApp(arg1) {

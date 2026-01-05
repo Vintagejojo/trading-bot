@@ -232,6 +232,28 @@ export namespace main {
 	        this.volume = source["volume"];
 	    }
 	}
+	export class EmailSettings {
+	    enabled: boolean;
+	    notificationEmail: string;
+	    smtpHost: string;
+	    smtpPort: number;
+	    smtpFromEmail: string;
+	    smtpPassword: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new EmailSettings(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.enabled = source["enabled"];
+	        this.notificationEmail = source["notificationEmail"];
+	        this.smtpHost = source["smtpHost"];
+	        this.smtpPort = source["smtpPort"];
+	        this.smtpFromEmail = source["smtpFromEmail"];
+	        this.smtpPassword = source["smtpPassword"];
+	    }
+	}
 	export class IndicatorData {
 	    timestamp: number;
 	    rsi: number;
@@ -324,6 +346,43 @@ export namespace main {
 	        this.free = source["free"];
 	        this.locked = source["locked"];
 	        this.usd_value = source["usd_value"];
+	    }
+	}
+
+}
+
+export namespace portfolio {
+	
+	export class Stats {
+	    symbol: string;
+	    total_holdings: number;
+	    total_cost: number;
+	    average_cost: number;
+	    current_price: number;
+	    current_value: number;
+	    unrealized_gain: number;
+	    unrealized_roi: number;
+	    total_buys: number;
+	    total_sells: number;
+	    realized_gains: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new Stats(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.symbol = source["symbol"];
+	        this.total_holdings = source["total_holdings"];
+	        this.total_cost = source["total_cost"];
+	        this.average_cost = source["average_cost"];
+	        this.current_price = source["current_price"];
+	        this.current_value = source["current_value"];
+	        this.unrealized_gain = source["unrealized_gain"];
+	        this.unrealized_roi = source["unrealized_roi"];
+	        this.total_buys = source["total_buys"];
+	        this.total_sells = source["total_sells"];
+	        this.realized_gains = source["realized_gains"];
 	    }
 	}
 

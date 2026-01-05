@@ -26,6 +26,16 @@ func New(dbPath string) (*DB, error) {
 		return nil, fmt.Errorf("failed to enable foreign keys: %w", err)
 	}
 
+	// Enable WAL mode for better concurrency
+	if _, err := conn.Exec("PRAGMA journal_mode = WAL"); err != nil {
+		return nil, fmt.Errorf("failed to enable WAL mode: %w", err)
+	}
+
+	// Set busy timeout to 5 seconds to handle lock contention
+	if _, err := conn.Exec("PRAGMA busy_timeout = 5000"); err != nil {
+		return nil, fmt.Errorf("failed to set busy timeout: %w", err)
+	}
+
 	db := &DB{conn: conn}
 
 	// Initialize tables
@@ -129,6 +139,58 @@ func (db *DB) InsertTrade(trade *Trade) (int64, error) {
 	}
 
 	return id, nil
+}
+
+// InsertTradesInTransaction inserts multiple trades in a single transaction
+// This is much faster and avoids database lock issues when inserting bulk data
+func (db *DB) InsertTradesInTransaction(trades []*Trade) error {
+	tx, err := db.conn.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback() // Rollback if we don't commit
+
+	query := `
+		INSERT INTO trades (
+			symbol, side, quantity, price, total, strategy,
+			indicator_values, signal_reason, paper_trade, timestamp,
+			binance_order_id, profit_loss, profit_loss_percent, related_buy_id
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`
+
+	stmt, err := tx.Prepare(query)
+	if err != nil {
+		return fmt.Errorf("failed to prepare statement: %w", err)
+	}
+	defer stmt.Close()
+
+	for _, trade := range trades {
+		_, err := stmt.Exec(
+			trade.Symbol,
+			trade.Side,
+			trade.Quantity,
+			trade.Price,
+			trade.Total,
+			trade.Strategy,
+			trade.IndicatorValues,
+			trade.SignalReason,
+			trade.PaperTrade,
+			trade.Timestamp,
+			trade.BinanceOrderID,
+			nullFloat64(trade.ProfitLoss),
+			nullFloat64(trade.ProfitLossPercent),
+			nullInt64(trade.RelatedBuyID),
+		)
+		if err != nil {
+			return fmt.Errorf("failed to insert trade: %w", err)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return nil
 }
 
 // InsertPosition inserts a new position into the database
@@ -353,8 +415,8 @@ func (db *DB) GetTradeSummary() (*TradeSummary, error) {
 	query := `
 		SELECT
 			COUNT(*) as total_trades,
-			SUM(CASE WHEN side = 'BUY' THEN 1 ELSE 0 END) as total_buys,
-			SUM(CASE WHEN side = 'SELL' THEN 1 ELSE 0 END) as total_sells,
+			COALESCE(SUM(CASE WHEN side = 'BUY' THEN 1 ELSE 0 END), 0) as total_buys,
+			COALESCE(SUM(CASE WHEN side = 'SELL' THEN 1 ELSE 0 END), 0) as total_sells,
 			COALESCE(SUM(CASE WHEN side = 'SELL' THEN profit_loss ELSE 0 END), 0) as total_profit_loss,
 			COALESCE(AVG(CASE WHEN side = 'SELL' THEN profit_loss ELSE NULL END), 0) as avg_profit_loss,
 			COALESCE(MAX(CASE WHEN side = 'SELL' THEN profit_loss ELSE NULL END), 0) as largest_win,

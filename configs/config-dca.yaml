@@ -1,0 +1,20 @@
+symbol: "BTCUSDT"
+quantity: 100.0  # $100 per purchase
+trading_enabled: true  # DCA is safe to enable!
+
+strategy:
+  type: "dca"
+  indicator:
+    type: "dca"
+    params:
+      day_of_week: 1  # 0=Sunday, 1=Monday, 2=Tuesday, etc.
+      hour_of_day: 9  # 9am UTC (adjust for your timezone)
+
+      # Buy-the-Dip Settings (optional)
+      buy_the_dip: true       # Enable buying extra on dips
+      dip_threshold: 5.0      # Buy when price drops ≥5% from 24h high
+      dip_multiplier: 1.5     # Buy 1.5x normal amount on dips
+
+# Optional: Safety & Resilience Features
+safety:
+  enabled: false  # DCA doesn't need advanced safety features

@@ -3,6 +3,7 @@ package strategy
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"rsi-bot/pkg/indicators"
 )
@@ -43,6 +44,40 @@ func (f *Factory) Create(config StrategyConfig) (Strategy, error) {
 		return NewMultiTimeframeStrategy(strategyConfig)
 	}
 
+	// Handle DCA strategy (doesn't use indicators)
+	if strategyType == "dca" {
+		// Default: Weekly on Monday at 9am
+		dayOfWeek := time.Monday
+		hourOfDay := 9
+		buyTheDip := false
+		dipThreshold := 5.0
+		dipMultiplier := 1.5
+
+		// Parse params if provided
+		if params := config.IndicatorConfig.Params; params != nil {
+			if dow, ok := params["day_of_week"].(float64); ok {
+				dayOfWeek = time.Weekday(int(dow))
+			}
+			if hour, ok := params["hour_of_day"].(float64); ok {
+				hourOfDay = int(hour)
+			}
+			if dip, ok := params["buy_the_dip"].(bool); ok {
+				buyTheDip = dip
+			}
+			if threshold, ok := params["dip_threshold"].(float64); ok {
+				dipThreshold = threshold
+			}
+			if multiplier, ok := params["dip_multiplier"].(float64); ok {
+				dipMultiplier = multiplier
+			}
+		}
+
+		if buyTheDip {
+			return NewDCAStrategyWithDip(dayOfWeek, hourOfDay, dipThreshold, dipMultiplier), nil
+		}
+		return NewDCAStrategy(dayOfWeek, hourOfDay), nil
+	}
+
 	// Create the indicator for other strategies
 	indicator, err := f.indicatorFactory.Create(config.IndicatorConfig)
 	if err != nil {
@@ -79,9 +114,9 @@ func (f *Factory) ValidateConfig(config StrategyConfig) error {
 
 	strategyType := strings.ToLower(config.Type)
 
-	// Skip indicator validation for multitimeframe strategy (it creates its own indicators)
-	if strategyType != "multitimeframe" && strategyType != "multi_timeframe" {
-		// Validate indicator config for non-multitimeframe strategies
+	// Skip indicator validation for strategies that don't use indicators
+	if strategyType != "multitimeframe" && strategyType != "multi_timeframe" && strategyType != "dca" {
+		// Validate indicator config for strategies that use indicators
 		if err := f.indicatorFactory.ValidateConfig(config.IndicatorConfig); err != nil {
 			return fmt.Errorf("invalid indicator config: %w", err)
 		}
@@ -108,6 +143,8 @@ func (f *Factory) ValidateConfig(config StrategyConfig) error {
 					config.OverboughtLevel, config.OversoldLevel)
 			}
 		}
+	case "dca":
+		// DCA strategy has no specific validation requirements
 	default:
 		return fmt.Errorf("unknown strategy type: %s", config.Type)
 	}
@@ -118,6 +155,7 @@ func (f *Factory) ValidateConfig(config StrategyConfig) error {
 // GetAvailableStrategies returns a list of all available strategy types
 func (f *Factory) GetAvailableStrategies() []string {
 	return []string{
+		"dca",
 		"rsi",
 		"macd",
 		"bbands",
@@ -130,6 +168,18 @@ func (f *Factory) GetDefaultConfig(strategyType string) StrategyConfig {
 	strategyType = strings.ToLower(strategyType)
 
 	switch strategyType {
+	case "dca":
+		return StrategyConfig{
+			Type: "dca",
+			IndicatorConfig: indicators.IndicatorConfig{
+				Type: "dca",
+				Params: map[string]interface{}{
+					"day_of_week": 1,   // Monday
+					"hour_of_day": 9,   // 9am
+				},
+			},
+		}
+
 	case "rsi":
 		return StrategyConfig{
 			Type: "rsi",

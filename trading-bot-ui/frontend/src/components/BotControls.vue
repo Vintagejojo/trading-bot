@@ -36,13 +36,22 @@
 
         <v-text-field
           v-model.number="config.quantity"
-          label="Quantity"
+          :label="config.strategy === 'dca' ? 'Amount (USD)' : 'Quantity'"
           type="number"
-          step="0.00000001"
+          :step="config.strategy === 'dca' ? '1' : '0.00000001'"
           variant="outlined"
           density="comfortable"
           class="mt-3"
-        ></v-text-field>
+          :prefix="config.strategy === 'dca' ? '$' : ''"
+          :hint="quantityHint"
+          persistent-hint
+        >
+          <template v-slot:append-inner v-if="config.strategy === 'dca' && currentPrice > 0">
+            <v-chip size="x-small" color="info" variant="flat">
+              ≈ {{ (config.quantity / currentPrice).toFixed(8) }} BTC
+            </v-chip>
+          </template>
+        </v-text-field>
 
         <!-- RSI Parameters -->
         <v-expand-transition>
@@ -149,6 +158,74 @@
           </v-card>
         </v-expand-transition>
 
+        <!-- DCA Parameters -->
+        <v-expand-transition>
+          <v-card v-if="config.strategy === 'dca'" variant="outlined" class="mt-3">
+            <v-card-subtitle>DCA Schedule</v-card-subtitle>
+            <v-card-text>
+              <v-select
+                v-model.number="config.params.day_of_week"
+                :items="daysOfWeek"
+                label="Day of Week"
+                variant="outlined"
+                density="compact"
+              ></v-select>
+
+              <v-text-field
+                v-model.number="config.params.hour_of_day"
+                label="Hour (UTC 0-23)"
+                type="number"
+                min="0"
+                max="23"
+                variant="outlined"
+                density="compact"
+                class="mt-2"
+                hint="9 = 9am UTC, 14 = 2pm UTC"
+              ></v-text-field>
+
+              <v-divider class="my-3"></v-divider>
+
+              <v-checkbox
+                v-model="config.params.buy_the_dip"
+                label="Enable Buy-the-Dip"
+                color="primary"
+                density="compact"
+                hint="Buy extra when price drops significantly"
+              ></v-checkbox>
+
+              <v-expand-transition>
+                <div v-if="config.params.buy_the_dip">
+                  <v-text-field
+                    v-model.number="config.params.dip_threshold"
+                    label="Dip Threshold (%)"
+                    type="number"
+                    step="0.1"
+                    min="1"
+                    max="20"
+                    variant="outlined"
+                    density="compact"
+                    class="mt-2"
+                    hint="Buy extra when price drops this % from 24h high"
+                  ></v-text-field>
+
+                  <v-text-field
+                    v-model.number="config.params.dip_multiplier"
+                    label="Dip Buy Multiplier"
+                    type="number"
+                    step="0.1"
+                    min="1"
+                    max="5"
+                    variant="outlined"
+                    density="compact"
+                    class="mt-2"
+                    hint="1.5 = buy 1.5x normal amount on dips"
+                  ></v-text-field>
+                </div>
+              </v-expand-transition>
+            </v-card-text>
+          </v-card>
+        </v-expand-transition>
+
         <v-checkbox
           v-model="config.paperTrading"
           label="Paper Trading (Recommended)"
@@ -245,7 +322,7 @@
 </template>
 
 <script>
-import { ref } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { GetDefaultStrategyParams, GenerateDemoTrades, ClearDemoTrades } from '../../wailsjs/go/main/App'
 
 export default {
@@ -259,6 +336,7 @@ export default {
   emits: ['start-bot', 'stop-bot', 'refresh-data'],
   setup(props, { emit }) {
     const strategies = [
+      { title: 'DCA - Dollar Cost Averaging (Recommended)', value: 'dca' },
       { title: 'RSI - Mean Reversion', value: 'rsi' },
       { title: 'MACD - Trend Following', value: 'macd' },
       { title: 'Bollinger Bands - Volatility', value: 'bbands' },
@@ -279,22 +357,62 @@ export default {
       { symbol: 'SHIBUSDT', label: 'SHIBUSDT - Shiba Inu/USDT', info: 'Extreme volatility with massive trading volume, ideal for aggressive scalping' }
     ]
 
+    const daysOfWeek = [
+      { title: 'Sunday', value: 0 },
+      { title: 'Monday', value: 1 },
+      { title: 'Tuesday', value: 2 },
+      { title: 'Wednesday', value: 3 },
+      { title: 'Thursday', value: 4 },
+      { title: 'Friday', value: 5 },
+      { title: 'Saturday', value: 6 }
+    ]
+
+    const currentPrice = ref(0)
+
     const config = ref({
-      strategy: 'rsi',
+      strategy: 'dca',
       symbol: 'BTCUSDT',
-      quantity: 0.001,
+      quantity: 100,
       paperTrading: true,
       params: {
-        period: 14,
-        overbought_level: 70,
-        oversold_level: 30
+        day_of_week: 1,
+        hour_of_day: 9,
+        buy_the_dip: false,
+        dip_threshold: 5.0,
+        dip_multiplier: 1.5
       }
     })
+
+    const quantityHint = computed(() => {
+      if (config.value.strategy === 'dca') {
+        return 'Dollar amount to invest per purchase'
+      }
+      return 'Amount of crypto to buy/sell per trade'
+    })
+
+    const fetchCurrentPrice = async () => {
+      try {
+        // Fetch BTC price from Binance public API
+        const response = await fetch('https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT')
+        const data = await response.json()
+        currentPrice.value = parseFloat(data.price)
+      } catch (error) {
+        console.error('Failed to fetch BTC price:', error)
+        currentPrice.value = 0
+      }
+    }
 
     const loadStrategyParams = async () => {
       try {
         const params = await GetDefaultStrategyParams(config.value.strategy)
         config.value.params = params
+
+        // Adjust default quantity for DCA
+        if (config.value.strategy === 'dca') {
+          config.value.quantity = 100 // $100 default for DCA
+        } else if (config.value.quantity === 100) {
+          config.value.quantity = 0.001 // Reset to BTC amount if switching from DCA
+        }
       } catch (error) {
         console.error('Failed to load strategy params:', error)
       }
@@ -350,12 +468,21 @@ export default {
       }
     }
 
-    loadStrategyParams()
+    // Load initial params and fetch price on mount
+    onMounted(() => {
+      loadStrategyParams()
+      fetchCurrentPrice()
+      // Refresh price every 30 seconds
+      setInterval(fetchCurrentPrice, 30000)
+    })
 
     return {
       strategies,
       tradingPairs,
+      daysOfWeek,
       config,
+      currentPrice,
+      quantityHint,
       loadStrategyParams,
       handleStart,
       handleStop,

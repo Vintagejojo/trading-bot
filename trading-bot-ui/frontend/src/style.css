@@ -7,3 +7,132 @@ html, body {
 #app {
     height: 100%;
 }
+
+/* ========================================
+   🌟 NEON GLOW EFFECTS
+   ======================================== */
+
+/* Neon Green Glow (Profit) */
+.neon-glow-success,
+.neon-glow-profit {
+    text-shadow:
+        0 0 5px #39FF14,
+        0 0 10px #39FF14,
+        0 0 20px #39FF14,
+        0 0 40px #39FF14;
+}
+
+/* Neon Red/Pink Glow (Loss) */
+.neon-glow-error,
+.neon-glow-loss {
+    text-shadow:
+        0 0 5px #FF073A,
+        0 0 10px #FF073A,
+        0 0 20px #FF073A,
+        0 0 40px #FF073A;
+}
+
+/* Neon Yellow Glow (Alerts) */
+.neon-glow-warning {
+    text-shadow:
+        0 0 5px #FFFF33,
+        0 0 10px #FFFF33,
+        0 0 20px #FFFF33,
+        0 0 40px #FFFF33;
+}
+
+/* Neon Cyan Glow (Info) */
+.neon-glow-info {
+    text-shadow:
+        0 0 5px #00FFFF,
+        0 0 10px #00FFFF,
+        0 0 20px #00FFFF,
+        0 0 40px #00FFFF;
+}
+
+/* Neon Purple Glow (Primary) */
+.neon-glow-primary {
+    text-shadow:
+        0 0 5px #9D00FF,
+        0 0 10px #9D00FF,
+        0 0 20px #9D00FF,
+        0 0 40px #9D00FF;
+}
+
+/* Subtle glow for cards/panels */
+.neon-card-success {
+    box-shadow:
+        0 0 10px rgba(57, 255, 20, 0.3),
+        0 0 20px rgba(57, 255, 20, 0.2);
+}
+
+.neon-card-error {
+    box-shadow:
+        0 0 10px rgba(255, 7, 58, 0.3),
+        0 0 20px rgba(255, 7, 58, 0.2);
+}
+
+.neon-card-info {
+    box-shadow:
+        0 0 10px rgba(0, 255, 255, 0.3),
+        0 0 20px rgba(0, 255, 255, 0.2);
+}
+
+.neon-card-primary {
+    box-shadow:
+        0 0 10px rgba(157, 0, 255, 0.3),
+        0 0 20px rgba(157, 0, 255, 0.2);
+}
+
+/* Subtle border glow */
+.neon-border-success {
+    border: 1px solid #39FF14;
+    box-shadow: 0 0 5px rgba(57, 255, 20, 0.5);
+}
+
+.neon-border-error {
+    border: 1px solid #FF073A;
+    box-shadow: 0 0 5px rgba(255, 7, 58, 0.5);
+}
+
+/* Hover effects for interactive elements */
+.neon-hover-primary:hover {
+    box-shadow:
+        0 0 15px rgba(157, 0, 255, 0.5),
+        0 0 30px rgba(157, 0, 255, 0.3);
+    transition: box-shadow 0.3s ease;
+}
+
+.neon-hover-success:hover {
+    box-shadow:
+        0 0 15px rgba(57, 255, 20, 0.5),
+        0 0 30px rgba(57, 255, 20, 0.3);
+    transition: box-shadow 0.3s ease;
+}
+
+/* Pulsing animation for alerts */
+@keyframes neon-pulse {
+    0%, 100% {
+        text-shadow:
+            0 0 5px currentColor,
+            0 0 10px currentColor,
+            0 0 20px currentColor;
+    }
+    50% {
+        text-shadow:
+            0 0 10px currentColor,
+            0 0 20px currentColor,
+            0 0 40px currentColor,
+            0 0 80px currentColor;
+    }
+}
+
+.neon-pulse {
+    animation: neon-pulse 2s ease-in-out infinite;
+}
+
+/* Monospace font for numbers (crypto aesthetic) */
+.crypto-mono {
+    font-family: 'Monaco', 'Courier New', monospace;
+    letter-spacing: 0.05em;
+}

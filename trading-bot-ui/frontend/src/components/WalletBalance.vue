@@ -101,7 +101,7 @@ export default {
       try {
         const result = await GetWalletBalance()
         balances.value = result || []
-        lastUpdated.value = new Date().toLocaleTimeString()
+        lastUpdated.value = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
       } catch (err) {
         console.error('Failed to load wallet balance:', err)
         error.value = err.toString() || 'Failed to load wallet balance'
