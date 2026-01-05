@@ -6,3 +6,7 @@ claude/
 claude_output/
 *.claude.json
 *.claude.md
+*.md
+!README.md
+!readme.md
+!QUICK_START.md
